@@ -1,0 +1,30 @@
+import { Controller, Get, Query, Request, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OutstandingQueryDto, ReportsService, SalesReportQueryDto } from './reports.service';
+
+@ApiTags('reports')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@Controller('reports')
+export class ReportsController {
+  constructor(private readonly reportsService: ReportsService) {}
+
+  @Get('sales')
+  @ApiOperation({ summary: 'Sales or purchase report for a date range' })
+  async sales(@Query() query: SalesReportQueryDto, @Request() req) {
+    return { data: await this.reportsService.salesReport(query, req.user) };
+  }
+
+  @Get('outstanding')
+  @ApiOperation({ summary: 'Unpaid invoices with aging buckets' })
+  async outstanding(@Query() query: OutstandingQueryDto, @Request() req) {
+    return { data: await this.reportsService.outstanding(query, req.user) };
+  }
+
+  @Get('stock')
+  @ApiOperation({ summary: 'Stock valuation and low-stock items' })
+  async stock(@Request() req) {
+    return { data: await this.reportsService.stock(req.user) };
+  }
+}
