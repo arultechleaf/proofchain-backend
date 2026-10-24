@@ -16,7 +16,9 @@ async function bootstrap() {
 
   // ── CORS ───────────────────────────────────────────────────────────────────
   // CORS_ORIGIN may list several frontends, comma-separated.
-  const corsOrigin = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+  const corsOrigin = (
+    process.env.CORS_ORIGIN || 'http://localhost:3001,http://localhost:3002'
+  )
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean);
@@ -72,4 +74,3 @@ async function bootstrap() {
 }
 
 bootstrap();
-
