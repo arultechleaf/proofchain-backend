@@ -9,10 +9,12 @@ import { PaymentsController } from './payments.controller';
 import { RazorpayService } from './razorpay.service';
 import { RazorpayController } from './razorpay.controller';
 import { AuditModule } from '../audit/audit.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Payment, RazorpayOrder, Invoice, Party]), AuditModule],
+  imports: [TypeOrmModule.forFeature([Payment, RazorpayOrder, Invoice, Party]), AuditModule, NotificationsModule],
   providers: [PaymentsService, RazorpayService],
   controllers: [PaymentsController, RazorpayController],
+  exports: [PaymentsService],
 })
 export class PaymentsModule {}

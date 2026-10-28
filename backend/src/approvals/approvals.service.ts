@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import { Approval, ApprovalDecision } from './approval.entity';
 import { Delivery, DeliveryStatus } from '../deliveries/delivery.entity';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UserRole } from '../users/user.entity';
 import { BlockchainService } from '../blockchain/blockchain.service';
 import {
@@ -41,6 +42,7 @@ export class ApprovalsService {
     private readonly txRepo: Repository<BlockchainTransaction>,
     private readonly blockchainService: BlockchainService,
     private readonly auditService: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async createApproval(
@@ -110,6 +112,13 @@ export class ApprovalsService {
       resourceId: deliveryId,
       details: { decision: dto.decision, comment: dto.comment },
     });
+
+    await this.notifications.notifyCompany(delivery.senderCompanyId, {
+      type: 'approval',
+      title: `Delivery ${dto.decision}`,
+      message: `Delivery ${delivery.deliveryReference} was ${dto.decision}${dto.comment ? `: ${dto.comment}` : '.'}`,
+      link: `/deliveries/${delivery.id}`,
+    }, reviewerId);
 
     return approval;
   }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards, Delete } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreatePartyDto, PartiesService, PartyQueryDto, UpdatePartyDto } from './parties.service';
@@ -32,6 +32,13 @@ export class PartiesController {
   @ApiOperation({ summary: 'Party with invoices, payments and balance' })
   async findOne(@Param('id') id: string, @Request() req) {
     return { data: await this.partiesService.getLedger(id, req.user) };
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a party that has no invoices, payments or quotations' })
+  async remove(@Param('id') id: string, @Request() req) {
+    await this.partiesService.remove(id, req.user);
+    return { data: { deleted: 1 } };
   }
 
   @Patch(':id')

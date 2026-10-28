@@ -17,6 +17,10 @@ export class Item {
   @Column({ type: 'varchar', length: 60, nullable: true })
   sku: string | null;
 
+  /** HSN (goods) or SAC (services) code printed on GST invoices. */
+  @Column({ name: 'hsn_code', type: 'varchar', length: 20, nullable: true })
+  hsnCode: string | null;
+
   @Column({ length: 20, default: 'pcs' })
   unit: string;
 

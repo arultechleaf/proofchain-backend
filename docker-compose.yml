@@ -1,0 +1,193 @@
+version: "3.8"
+
+# ============================================================
+# ProofChain — Full Development Stack
+# ============================================================
+# Services:
+#   mysql         — Private business data (MySQL 8)
+#   backend       — NestJS API server
+#   frontend      — Next.js app
+#   besu-node1    — Hyperledger Besu validator (Company A)
+#   besu-node2    — Hyperledger Besu validator (Company B)
+#   besu-node3    — Hyperledger Besu validator (Auditor)
+# ============================================================
+# Start with: docker compose --env-file backend/.env up --build
+
+services:
+  # ─── MySQL Database ─────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: proofchain_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_DATABASE:-proofchain_db}
+      MYSQL_USER: ${DB_USERNAME:-proofchain}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-ProofChain_Dev_2024!}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/network/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - proofchain_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 10s
+      retries: 10
+      interval: 5s
+
+  # ─── Besu Node 1 (Company A — Validator) ────────────────────────────────────
+  besu-node1:
+    image: hyperledger/besu:latest
+    container_name: proofchain_besu_node1
+    restart: unless-stopped
+    environment:
+      - BESU_OPTS=-Xmx512m
+    volumes:
+      - ./backend/network/besu/node1:/opt/besu/data
+      - ./backend/network/besu/genesis.json:/opt/besu/genesis.json:ro
+    command:
+      - --data-path=/opt/besu/data
+      - --genesis-file=/opt/besu/genesis.json
+      - --rpc-http-enabled=true
+      - --rpc-http-host=0.0.0.0
+      - --rpc-http-port=8545
+      - --rpc-http-cors-origins=*
+      - --rpc-http-api=ETH,NET,QBFT,ADMIN
+      - --host-allowlist=*
+      - --p2p-port=30303
+      - --p2p-host=0.0.0.0
+      - --network-id=1337
+      - --miner-enabled=false
+      - --logging=INFO
+      - --node-private-key-file=/opt/besu/data/key
+    ports:
+      - "8545:8545"
+      - "30303:30303"
+    networks:
+      - proofchain_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -X POST --data '{\"jsonrpc\":\"2.0\",\"method\":\"net_version\",\"params\":[],\"id\":1}' http://localhost:8545 | grep -q result"]
+      timeout: 10s
+      retries: 15
+      interval: 10s
+
+  # ─── Besu Node 2 (Company B — Validator) ────────────────────────────────────
+  besu-node2:
+    image: hyperledger/besu:latest
+    container_name: proofchain_besu_node2
+    restart: unless-stopped
+    environment:
+      - BESU_OPTS=-Xmx512m
+    volumes:
+      - ./backend/network/besu/node2:/opt/besu/data
+      - ./backend/network/besu/genesis.json:/opt/besu/genesis.json:ro
+    command:
+      - --data-path=/opt/besu/data
+      - --genesis-file=/opt/besu/genesis.json
+      - --rpc-http-enabled=true
+      - --rpc-http-host=0.0.0.0
+      - --rpc-http-port=8546
+      - --rpc-http-cors-origins=*
+      - --rpc-http-api=ETH,NET,QBFT
+      - --host-allowlist=*
+      - --p2p-port=30304
+      - --p2p-host=0.0.0.0
+      - --network-id=1337
+      - --bootnodes=enode://REPLACE_WITH_NODE1_ENODE@besu-node1:30303
+      - --logging=INFO
+      - --node-private-key-file=/opt/besu/data/key
+    ports:
+      - "8546:8546"
+      - "30304:30304"
+    depends_on:
+      besu-node1:
+        condition: service_healthy
+    networks:
+      - proofchain_net
+
+  # ─── Besu Node 3 (Auditor — Validator) ─────────────────────────────────────
+  besu-node3:
+    image: hyperledger/besu:latest
+    container_name: proofchain_besu_node3
+    restart: unless-stopped
+    environment:
+      - BESU_OPTS=-Xmx512m
+    volumes:
+      - ./backend/network/besu/node3:/opt/besu/data
+      - ./backend/network/besu/genesis.json:/opt/besu/genesis.json:ro
+    command:
+      - --data-path=/opt/besu/data
+      - --genesis-file=/opt/besu/genesis.json
+      - --rpc-http-enabled=true
+      - --rpc-http-host=0.0.0.0
+      - --rpc-http-port=8547
+      - --rpc-http-cors-origins=*
+      - --rpc-http-api=ETH,NET,QBFT
+      - --host-allowlist=*
+      - --p2p-port=30305
+      - --p2p-host=0.0.0.0
+      - --network-id=1337
+      - --bootnodes=enode://REPLACE_WITH_NODE1_ENODE@besu-node1:30303
+      - --logging=INFO
+      - --node-private-key-file=/opt/besu/data/key
+    ports:
+      - "8547:8547"
+      - "30305:30305"
+    depends_on:
+      besu-node1:
+        condition: service_healthy
+    networks:
+      - proofchain_net
+
+  # ─── NestJS Backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: proofchain_backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      - DB_HOST=mysql
+      - BESU_RPC_URL=http://besu-node1:8545
+    ports:
+      - "3001:3001"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      besu-node1:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - proofchain_net
+
+  # ─── Next.js Frontend ───────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: proofchain_frontend
+    restart: unless-stopped
+    env_file:
+      - ./frontend/.env
+    environment:
+      # The browser calls /api on the frontend; Next.js forwards it to the backend container.
+      - BACKEND_URL=http://backend:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - proofchain_net
+
+volumes:
+  mysql_data:
+
+networks:
+  proofchain_net:
+    driver: bridge

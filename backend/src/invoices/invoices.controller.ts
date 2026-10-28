@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards,
+  BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -41,6 +41,15 @@ export class InvoicesController {
   @ApiOperation({ summary: 'List sales and purchases together' })
   async list(@Query() query: InvoiceQueryDto, @Request() req) {
     return this.invoicesService.findAll(query, req.user);
+  }
+
+  @Get('invoices/next-number')
+  @ApiOperation({ summary: 'The invoice or bill number the next document will get' })
+  async nextNumber(@Query('type') type: string, @Request() req) {
+    if (type !== InvoiceType.SALE && type !== InvoiceType.PURCHASE) {
+      throw new BadRequestException('type must be "sale" or "purchase"');
+    }
+    return { data: await this.invoicesService.previewNextNumber(type, req.user) };
   }
 
   @Get('invoices/:id')

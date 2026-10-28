@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Not, Repository } from 'typeorm';
-import { IsIn, IsOptional, Matches } from 'class-validator';
+import { Between, In, Not, Repository } from 'typeorm';
+import { Type } from 'class-transformer';
+import { IsIn, IsInt, IsOptional, Matches, Max, Min } from 'class-validator';
 import { Invoice, InvoiceStatus, InvoiceType } from '../invoices/invoice.entity';
+import { Payment, PaymentDirection } from '../payments/payment.entity';
 import { ItemsService } from '../items/items.service';
 import { AuthUser, readScope, round2 } from '../common/tenant';
 
@@ -24,10 +26,28 @@ export class OutstandingQueryDto {
   type?: 'sale' | 'purchase';
 }
 
+export class TransactionsQueryDto {
+  @IsOptional() @IsIn(['all', 'sale', 'purchase', 'payment_in', 'payment_out'])
+  kind?: 'all' | 'sale' | 'purchase' | 'payment_in' | 'payment_out';
+
+  @IsOptional() @Matches(ISO_DATE, { message: 'from must be YYYY-MM-DD' })
+  from?: string;
+
+  @IsOptional() @Matches(ISO_DATE, { message: 'to must be YYYY-MM-DD' })
+  to?: string;
+
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1)
+  page?: number;
+
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200)
+  limit?: number;
+}
+
 @Injectable()
 export class ReportsService {
   constructor(
     @InjectRepository(Invoice) private readonly invoiceRepo: Repository<Invoice>,
+    @InjectRepository(Payment) private readonly paymentRepo: Repository<Payment>,
     private readonly itemsService: ItemsService,
   ) {}
 
@@ -125,6 +145,62 @@ export class ReportsService {
       rows,
       buckets,
       totals: { receivable: totalOf(InvoiceType.SALE), payable: totalOf(InvoiceType.PURCHASE) },
+    };
+  }
+
+  /** Every invoice, bill and payment in the range, newest first, with totals per kind. */
+  async transactions(query: TransactionsQueryDto, user: AuthUser) {
+    const kind = query.kind ?? 'all';
+    const to = query.to ?? new Date().toISOString().slice(0, 10);
+    const from = query.from ?? this.daysBefore(to, 29);
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const scope = readScope(user);
+
+    const wantInvoices = kind === 'all' || kind === 'sale' || kind === 'purchase';
+    const wantPayments = kind === 'all' || kind === 'payment_in' || kind === 'payment_out';
+
+    const invoices = wantInvoices
+      ? await this.invoiceRepo.find({
+          where: {
+            invoiceDate: Between(from, to),
+            status: Not(InvoiceStatus.CANCELLED),
+            ...(kind === 'sale' || kind === 'purchase' ? { type: kind as InvoiceType } : {}),
+            ...(scope ? { companyId: scope } : {}),
+          },
+          relations: { party: true },
+        })
+      : [];
+    const payments = wantPayments
+      ? await this.paymentRepo.find({
+          where: {
+            paymentDate: Between(from, to),
+            ...(kind === 'payment_in' ? { direction: PaymentDirection.IN } : {}),
+            ...(kind === 'payment_out' ? { direction: PaymentDirection.OUT } : {}),
+            ...(scope ? { companyId: scope } : {}),
+          },
+          relations: { party: true },
+        })
+      : [];
+
+    const rows = [
+      ...invoices.map((i) => ({
+        id: i.id, kind: i.type as string, date: i.invoiceDate, reference: i.invoiceNumber,
+        partyName: i.party?.name ?? '—', amount: i.total, status: i.status as string,
+        link: `/${i.type === InvoiceType.SALE ? 'sales' : 'purchases'}/${i.id}`,
+      })),
+      ...payments.map((p) => ({
+        id: p.id, kind: p.direction === PaymentDirection.IN ? 'payment_in' : 'payment_out', date: p.paymentDate,
+        reference: p.reference ?? p.method, partyName: p.party?.name ?? '—', amount: p.amount, status: 'recorded',
+        link: '/payments',
+      })),
+    ].sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? 1 : -1));
+
+    const sumOf = (k: string) => round2(rows.filter((r) => r.kind === k).reduce((s, r) => s + r.amount, 0));
+    return {
+      from, to, page, limit, total: rows.length,
+      rows: rows.slice((page - 1) * limit, page * limit),
+      totals: { sale: sumOf('sale'), purchase: sumOf('purchase'), paymentIn: sumOf('payment_in'), paymentOut: sumOf('payment_out') },
     };
   }
 

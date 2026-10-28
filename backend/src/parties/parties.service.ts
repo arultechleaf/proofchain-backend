@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -9,6 +9,7 @@ import { PartialType } from '@nestjs/swagger';
 import { Party, PartyType } from './party.entity';
 import { Invoice, InvoiceStatus, InvoiceType } from '../invoices/invoice.entity';
 import { Payment, PaymentDirection } from '../payments/payment.entity';
+import { Quotation } from '../quotations/quotation.entities';
 import { AuthUser, assertAccess, readScope, round2, writeCompanyId } from '../common/tenant';
 import { AuditService } from '../audit/audit.service';
 
@@ -111,6 +112,24 @@ export class PartiesService {
     if (!party) throw new NotFoundException('Party not found');
     assertAccess(party.companyId, user, 'Party');
     return party;
+  }
+
+  /** Delete a customer/supplier that has no documents. Otherwise it should be marked inactive. */
+  async remove(id: string, user: AuthUser): Promise<void> {
+    writeCompanyId(user);
+    const party = await this.findById(id, user);
+    const [invoices, payments, quotations] = await Promise.all([
+      this.invoiceRepo.count({ where: { partyId: id } }),
+      this.paymentRepo.count({ where: { partyId: id } }),
+      this.partyRepo.manager.count(Quotation, { where: { partyId: id } }),
+    ]);
+    if (invoices || payments || quotations) {
+      throw new BadRequestException(
+        `"${party.name}" has ${invoices} invoice(s), ${payments} payment(s) and ${quotations} quotation(s), so it cannot be deleted. Mark it inactive instead.`,
+      );
+    }
+    await this.partyRepo.remove(party);
+    await this.audit.log({ actorId: user.id, action: 'PARTY_DELETED', resourceType: 'party', resourceId: id, details: { name: party.name } });
   }
 
   async update(id: string, dto: UpdatePartyDto, user: AuthUser): Promise<Party> {

@@ -20,6 +20,7 @@ import {
 import { ProofRecord, VerificationStatus } from '../proofs/proof-record.entity';
 import { BlockchainService } from '../blockchain/blockchain.service';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UserRole } from '../users/user.entity';
 import { IsString, IsInt, IsOptional, IsUUID, Min, IsObject } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -81,6 +82,7 @@ export class DeliveriesService {
     private readonly proofRepo: Repository<ProofRecord>,
     private readonly blockchainService: BlockchainService,
     private readonly auditService: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async create(
@@ -185,6 +187,13 @@ export class DeliveriesService {
         transactionHash: updatedTx.transactionHash,
       },
     });
+
+    await this.notifications.notifyCompany(delivery.receiverCompanyId, {
+      type: 'delivery',
+      title: 'New delivery received',
+      message: `Delivery ${delivery.deliveryReference} is waiting for your approval.`,
+      link: `/deliveries/${delivery.id}`,
+    }, actorId);
 
     return this.findById(delivery.id);
   }

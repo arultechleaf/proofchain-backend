@@ -8,6 +8,8 @@ import { Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
 import { Item } from './item.entity';
 import { StockMovement, StockReason } from './stock-movement.entity';
+import { InvoiceLine } from '../invoices/invoice-line.entity';
+import { QuotationLine } from '../quotations/quotation.entities';
 import { AuthUser, assertAccess, readScope, round2, writeCompanyId } from '../common/tenant';
 import { AuditService } from '../audit/audit.service';
 
@@ -17,6 +19,9 @@ export class CreateItemDto {
 
   @IsOptional() @IsString() @MaxLength(60)
   sku?: string;
+
+  @IsOptional() @IsString() @MaxLength(20)
+  hsnCode?: string;
 
   @IsOptional() @IsString() @MaxLength(20)
   unit?: string;
@@ -84,6 +89,7 @@ export class ItemsService {
         companyId,
         name: dto.name.trim(),
         sku: dto.sku ?? null,
+        hsnCode: dto.hsnCode?.trim() || null,
         unit: dto.unit ?? 'pcs',
         salePrice: dto.salePrice ?? 0,
         purchasePrice: dto.purchasePrice ?? 0,
@@ -127,6 +133,29 @@ export class ItemsService {
     if (!item) throw new NotFoundException('Item not found');
     assertAccess(item.companyId, user, 'Item');
     return item;
+  }
+
+  /** Delete an item that was never sold, bought or quoted. Otherwise it should be marked inactive. */
+  async remove(id: string, user: AuthUser): Promise<void> {
+    writeCompanyId(user);
+    const item = await this.itemRepo.findOne({ where: { id } });
+    if (!item) throw new NotFoundException('Item not found');
+    assertAccess(item.companyId, user, 'Item');
+    const manager = this.itemRepo.manager;
+    const [invoiceLines, quotationLines] = await Promise.all([
+      manager.count(InvoiceLine, { where: { itemId: id } }),
+      manager.count(QuotationLine, { where: { itemId: id } }),
+    ]);
+    if (invoiceLines || quotationLines) {
+      throw new BadRequestException(
+        `"${item.name}" is used on ${invoiceLines} invoice line(s) and ${quotationLines} quotation line(s), so it cannot be deleted. Mark it inactive instead.`,
+      );
+    }
+    await manager.transaction(async (m) => {
+      await m.delete(StockMovement, { itemId: id });
+      await m.remove(item);
+    });
+    await this.audit.log({ actorId: user.id, action: 'ITEM_DELETED', resourceType: 'item', resourceId: id, details: { name: item.name } });
   }
 
   async update(id: string, dto: UpdateItemDto, user: AuthUser): Promise<Item> {

@@ -10,13 +10,18 @@ import { InvoicesController } from './invoices.controller';
 import { ItemsModule } from '../items/items.module';
 import { BlockchainModule } from '../blockchain/blockchain.module';
 import { AuditModule } from '../audit/audit.module';
+import { PaymentsModule } from '../payments/payments.module';
+import { Company } from '../companies/company.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Invoice, InvoiceLine, Party, Item, BlockchainTransaction]),
+    TypeOrmModule.forFeature([Invoice, InvoiceLine, Party, Item, BlockchainTransaction, Company]),
     ItemsModule,
     BlockchainModule,
     AuditModule,
+    NotificationsModule,
+    PaymentsModule,
   ],
   providers: [InvoicesService],
   controllers: [InvoicesController],

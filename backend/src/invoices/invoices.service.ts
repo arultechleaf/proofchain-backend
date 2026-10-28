@@ -1,10 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  ArrayMinSize, IsArray, IsInt, IsNumber, IsOptional, IsString, IsUUID, Matches, MaxLength, Min, Max,
-  ValidateNested,
-} from 'class-validator';
+import { ArrayMinSize, IsArray, IsInt, IsNumber, IsOptional, IsString, IsUUID, Matches, MaxLength, Min, Max, ValidateNested, IsBoolean, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Invoice, InvoiceStatus, InvoiceType } from './invoice.entity';
 import { InvoiceLine } from './invoice-line.entity';
@@ -17,6 +14,11 @@ import {
 } from '../blockchain/blockchain-transaction.entity';
 import { BlockchainService } from '../blockchain/blockchain.service';
 import { AuditService } from '../audit/audit.service';
+import { Company } from '../companies/company.entity';
+import { PaymentsService } from '../payments/payments.service';
+import { PaymentDirection } from '../payments/payment.entity';
+import { LineCalc, calcLine, calcTotals, supplyKind } from './gst';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AuthUser, assertAccess, readScope, round2, writeCompanyId } from '../common/tenant';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -39,6 +41,25 @@ export class InvoiceLineDto {
   /** Defaults to the item's tax rate when an item is chosen. */
   @IsOptional() @IsNumber() @Min(0) @Max(100) @Type(() => Number)
   taxRate?: number;
+
+  /** Defaults to the item's SKU. */
+  @IsOptional() @IsString() @MaxLength(60)
+  sku?: string;
+
+  /** HSN (goods) or SAC (services) code; defaults to the item's. */
+  @IsOptional() @IsString() @MaxLength(20)
+  hsnCode?: string;
+
+  /** Defaults to the item's unit. */
+  @IsOptional() @IsString() @MaxLength(20)
+  unit?: string;
+
+  @IsOptional() @IsIn(['amount', 'percent'])
+  discountType?: 'amount' | 'percent';
+
+  /** A flat amount or a percentage, depending on discountType. */
+  @IsOptional() @IsNumber() @Min(0) @Type(() => Number)
+  discountValue?: number;
 }
 
 export class CreateInvoiceDto {
@@ -62,6 +83,31 @@ export class CreateInvoiceDto {
 
   @IsOptional() @IsString() @MaxLength(1000)
   notes?: string;
+
+  /** cash, upi, bank, or credit (pay later). Defaults to credit. */
+  @IsOptional() @IsIn(['cash', 'upi', 'bank', 'credit'])
+  paymentType?: 'cash' | 'upi' | 'bank' | 'credit';
+
+  /** Money taken at billing; recorded as a payment against this invoice. */
+  @IsOptional() @IsNumber() @Min(0) @Type(() => Number)
+  amountReceived?: number;
+
+  @IsOptional() @IsString() @MaxLength(30)
+  customerMobile?: string;
+
+  @IsOptional() @Matches(/^([0-9A-Za-z]{15})?$/, { message: 'customerGstin must be 15 letters/digits' })
+  customerGstin?: string;
+
+  @IsOptional() @IsString() @MaxLength(500)
+  billingAddress?: string;
+
+  /** Two-digit state code. Defaults to the state in the customer's GSTIN. */
+  @IsOptional() @Matches(/^(\d{2})?$/, { message: 'placeOfSupply must be a two-digit state code' })
+  placeOfSupply?: string;
+
+  /** Round the grand total to the nearest rupee. */
+  @IsOptional() @IsBoolean()
+  roundOff?: boolean;
 }
 
 export class InvoiceQueryDto {
@@ -95,6 +141,14 @@ const NUMBER_PREFIX: Record<InvoiceType, string> = {
   [InvoiceType.PURCHASE]: 'BILL',
 };
 
+/** True for a unique-index violation from MySQL or SQLite. */
+function isDuplicateKey(err: unknown): boolean {
+  const e = err as { code?: string; errno?: number; driverError?: { code?: string; errno?: number }; message?: string };
+  const code = e?.code ?? e?.driverError?.code;
+  const errno = e?.errno ?? e?.driverError?.errno;
+  return code === 'ER_DUP_ENTRY' || errno === 1062 || /SQLITE_CONSTRAINT/.test(code ?? '') || /UNIQUE constraint failed/i.test(e?.message ?? '');
+}
+
 @Injectable()
 export class InvoicesService {
   constructor(
@@ -105,6 +159,9 @@ export class InvoicesService {
     private readonly itemsService: ItemsService,
     private readonly blockchain: BlockchainService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
+    @InjectRepository(Company) private readonly companyRepo: Repository<Company>,
+    private readonly payments: PaymentsService,
   ) {}
 
   async create(type: InvoiceType, dto: CreateInvoiceDto, user: AuthUser): Promise<Invoice> {
@@ -113,15 +170,15 @@ export class InvoicesService {
     const party = await this.partyRepo.findOne({ where: { id: dto.partyId } });
     if (!party || party.companyId !== companyId) throw new BadRequestException('Party not found');
 
-    const invoiceNumber = dto.invoiceNumber?.trim() || (await this.nextNumber(companyId, type));
+    const manualNumber = dto.invoiceNumber?.trim();
+    let invoiceNumber = manualNumber || (await this.nextNumber(companyId, type));
     const duplicate = await this.invoiceRepo.findOne({ where: { companyId, type, invoiceNumber } });
     if (duplicate) throw new ConflictException(`Invoice number ${invoiceNumber} already exists`);
 
-    // Resolve lines against the item catalogue and compute totals.
+    // Resolve lines against the item catalogue and work out GST line by line.
     const items = new Map<string, Item>();
     const lines: Array<Partial<InvoiceLine>> = [];
-    let subtotal = 0;
-    let taxTotal = 0;
+    const calcs: LineCalc[] = [];
 
     for (const [index, l] of dto.lines.entries()) {
       let item: Item | null = null;
@@ -137,11 +194,20 @@ export class InvoicesService {
       if (rate === undefined) throw new BadRequestException(`Line ${index + 1} needs a rate`);
       const taxRate = l.taxRate ?? item?.taxRate ?? 0;
 
-      const amount = round2(l.quantity * rate);
-      subtotal += amount;
-      taxTotal += round2((amount * taxRate) / 100);
+      const calc = calcLine({ quantity: l.quantity, rate, taxRate, discountType: l.discountType, discountValue: l.discountValue });
+      if ('error' in calc) throw new BadRequestException(`Line ${index + 1}: ${calc.error}`);
+      calcs.push(calc);
       lines.push({
-        position: index, itemId: item?.id ?? null, description, quantity: l.quantity, rate, taxRate, amount,
+        position: index, itemId: item?.id ?? null, description, quantity: l.quantity, rate, taxRate, amount: calc.amount,
+        sku: l.sku?.trim() || item?.sku || null,
+        hsnCode: l.hsnCode?.trim() || item?.hsnCode || null,
+        unit: l.unit?.trim() || item?.unit || null,
+        discountType: calc.discountAmount > 0 ? (l.discountType ?? 'amount') : null,
+        discountValue: l.discountValue ?? 0,
+        discountAmount: calc.discountAmount,
+        taxableAmount: calc.taxableAmount,
+        gstAmount: calc.gstAmount,
+        lineTotal: calc.lineTotal,
       });
     }
 
@@ -157,19 +223,32 @@ export class InvoicesService {
       }
     }
 
-    subtotal = round2(subtotal);
-    taxTotal = round2(taxTotal);
-    const discount = round2(dto.discount ?? 0);
-    if (discount > subtotal + taxTotal) throw new BadRequestException('Discount cannot exceed the invoice total');
-    const total = round2(subtotal + taxTotal - discount);
+    // CGST + SGST inside one state, IGST between states (decided from the two GSTINs / place of supply).
+    const company = await this.companyRepo.findOne({ where: { id: companyId } });
+    const customerGstin = (dto.customerGstin ?? party.taxId ?? '').trim().toUpperCase() || null;
+    const kind = supplyKind(company?.gstin, customerGstin, dto.placeOfSupply);
+    const totals = calcTotals(calcs, kind, { extraDiscount: dto.discount, roundOff: dto.roundOff });
+    if ('error' in totals) throw new BadRequestException(totals.error);
+    const { subtotal, taxTotal, discount, total } = totals;
+
+    const paymentType = dto.paymentType ?? 'credit';
+    const received = round2(dto.amountReceived ?? 0);
+    if (paymentType === 'credit' && received > 0) {
+      throw new BadRequestException('A credit invoice has nothing received at billing. Choose cash, UPI or bank, or record the payment later.');
+    }
+    if (received > total) throw new BadRequestException(`Amount received (${received}) cannot be more than the grand total (${total})`);
 
     const invoiceDate = dto.invoiceDate ?? new Date().toISOString().slice(0, 10);
 
-    const saved = await this.invoiceRepo.manager.transaction(async (manager) => {
+    const persist = () => this.invoiceRepo.manager.transaction(async (manager) => {
       const invoice = await manager.save(
         manager.create(Invoice, {
           companyId, type, invoiceNumber, partyId: party.id, invoiceDate,
           dueDate: dto.dueDate ?? null, subtotal, taxTotal, discount, total,
+          taxableValue: totals.taxableValue, cgst: totals.cgst, sgst: totals.sgst, igst: totals.igst, roundOff: totals.roundOff,
+          paymentType, customerMobile: dto.customerMobile?.trim() || party.phone || null, customerGstin,
+          billingAddress: dto.billingAddress?.trim() || party.address || null,
+          placeOfSupply: dto.placeOfSupply?.trim() || (customerGstin && /^\d{2}/.test(customerGstin) ? customerGstin.slice(0, 2) : null),
           paidAmount: 0, status: InvoiceStatus.ISSUED, notes: dto.notes ?? null, createdBy: user.id,
         }),
       );
@@ -183,8 +262,40 @@ export class InvoicesService {
           sale ? StockReason.SALE : StockReason.PURCHASE, invoiceNumber, user.id,
         );
       }
+      if (received > 0) {
+        await this.payments.record(
+          companyId,
+          {
+            partyId: party.id,
+            invoiceId: invoice.id,
+            direction: type === InvoiceType.SALE ? PaymentDirection.IN : PaymentDirection.OUT,
+            amount: received,
+            method: paymentType,
+            paymentDate: invoiceDate,
+            reference: invoiceNumber,
+            notes: 'Taken at billing',
+          },
+          user.id,
+          manager,
+        );
+      }
       return invoice;
     });
+
+    // Two people saving at the same moment can be handed the same automatic number; the unique
+    // index rejects the second one and the whole transaction rolls back, so just take the next number.
+    let saved: Invoice;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        saved = await persist();
+        break;
+      } catch (err) {
+        if (manualNumber || attempt >= 12 || !isDuplicateKey(err)) throw err;
+        // A short random pause stops several losers retrying in lockstep and colliding again.
+        await new Promise((r) => setTimeout(r, 20 + Math.floor(Math.random() * 60)));
+        invoiceNumber = await this.nextNumber(companyId, type);
+      }
+    }
 
     await this.registerOnChain(saved.id);
     await this.audit.log({
@@ -193,6 +304,12 @@ export class InvoicesService {
       resourceType: 'invoice', resourceId: saved.id,
       details: { invoiceNumber, total, partyId: party.id },
     });
+    await this.notifications.notifyCompany(companyId, {
+      type: 'invoice',
+      title: type === InvoiceType.SALE ? 'Invoice created' : 'Bill created',
+      message: `${invoiceNumber} for ${party.name} (${total}) was created by ${user.name}.`,
+      link: `/${type === InvoiceType.SALE ? 'sales' : 'purchases'}/${saved.id}`,
+    }, user.id);
     return this.findById(saved.id, user);
   }
 
@@ -325,6 +442,9 @@ export class InvoicesService {
       taxTotal: invoice.taxTotal,
       discount: invoice.discount,
       total: invoice.total,
+      gst: invoice.taxableValue == null ? undefined : {
+        taxableValue: invoice.taxableValue, cgst: invoice.cgst, sgst: invoice.sgst, igst: invoice.igst, roundOff: invoice.roundOff,
+      },
     });
   }
 
@@ -353,11 +473,32 @@ export class InvoicesService {
     });
   }
 
+  /** The number the next document of this type will get, for the "new invoice" form. */
+  async previewNextNumber(type: InvoiceType, user: AuthUser): Promise<{ invoiceNumber: string; type: InvoiceType; sellerGstin: string | null }> {
+    const companyId = writeCompanyId(user);
+    const company = await this.companyRepo.findOne({ where: { id: companyId } });
+    // The seller's GSTIN lets the form work out CGST + SGST versus IGST while the user types.
+    return { invoiceNumber: await this.nextNumber(companyId, type), type, sellerGstin: company?.gstin ?? null };
+  }
+
+  /**
+   * PREFIX-YEAR-0001, counting on from the highest number already used this year (so deleting or
+   * cancelling a document never makes a number repeat), and starting again at 0001 each year.
+   */
   private async nextNumber(companyId: string, type: InvoiceType): Promise<string> {
-    const count = await this.invoiceRepo.count({ where: { companyId, type } });
     const year = new Date().getFullYear();
-    for (let n = count + 1; ; n++) {
-      const candidate = `${NUMBER_PREFIX[type]}-${year}-${String(n).padStart(4, '0')}`;
+    const prefix = `${NUMBER_PREFIX[type]}-${year}-`;
+    const rows = await this.invoiceRepo
+      .createQueryBuilder('i')
+      .select('i.invoiceNumber', 'invoiceNumber')
+      .where('i.companyId = :companyId AND i.type = :type AND i.invoiceNumber LIKE :like', { companyId, type, like: `${prefix}%` })
+      .getRawMany<{ invoiceNumber: string }>();
+    const highest = rows.reduce((max, r) => {
+      const n = Number(r.invoiceNumber.slice(prefix.length));
+      return Number.isInteger(n) && n > max ? n : max;
+    }, 0);
+    for (let n = highest + 1; ; n++) {
+      const candidate = `${prefix}${String(n).padStart(4, '0')}`;
       const taken = await this.invoiceRepo.findOne({ where: { companyId, type, invoiceNumber: candidate } });
       if (!taken) return candidate;
     }

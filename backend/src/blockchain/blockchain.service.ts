@@ -190,6 +190,8 @@ export class BlockchainService implements OnModuleInit {
     taxTotal: number;
     discount: number;
     total: number;
+    /** Present only on invoices made with GST support, so older proofs still verify. */
+    gst?: { taxableValue: number; cgst: number; sgst: number; igst: number; roundOff: number };
   }): { hexHash: string; bytes32Hash: string; canonicalPayload: string } {
     const canonical = JSON.stringify({
       invoiceId: payload.invoiceId,
@@ -210,6 +212,7 @@ export class BlockchainService implements OnModuleInit {
       taxTotal: payload.taxTotal,
       discount: payload.discount,
       total: payload.total,
+      ...(payload.gst ? { gst: payload.gst } : {}),
     });
     const hexHash = crypto.createHash('sha256').update(canonical, 'utf8').digest('hex');
     return { hexHash, bytes32Hash: '0x' + hexHash, canonicalPayload: canonical };

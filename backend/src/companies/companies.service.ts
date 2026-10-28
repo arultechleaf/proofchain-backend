@@ -19,6 +19,9 @@ export class CreateCompanyDto {
 
   @IsOptional() @IsString() @MaxLength(500)
   description?: string;
+
+  @IsOptional() @Matches(/^([0-9A-Za-z]{15})?$/, { message: 'GSTIN must be 15 letters/digits' })
+  gstin?: string;
 }
 
 export class UpdateCompanyDto extends PartialType(CreateCompanyDto) {
@@ -68,6 +71,7 @@ export class CompaniesService {
         organizationCode: code,
         organizationType: dto.organizationType,
         description: dto.description ?? (null as any),
+        gstin: dto.gstin?.trim().toUpperCase() || null,
       }),
     );
     await this.audit.log({
@@ -90,6 +94,7 @@ export class CompaniesService {
     if (dto.name !== undefined) company.name = dto.name.trim();
     if (dto.organizationType !== undefined) company.organizationType = dto.organizationType;
     if (dto.description !== undefined) company.description = dto.description;
+    if (dto.gstin !== undefined) company.gstin = dto.gstin.trim().toUpperCase() || null;
     if (dto.isActive !== undefined) company.isActive = dto.isActive;
 
     const saved = await this.companyRepo.save(company);

@@ -18,6 +18,36 @@ export class InvoiceLine {
   @Column({ type: 'integer', default: 0 })
   position: number;
 
+  @Column({ type: 'varchar', length: 60, nullable: true })
+  sku: string | null;
+
+  @Column({ name: 'hsn_code', type: 'varchar', length: 20, nullable: true })
+  hsnCode: string | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  unit: string | null;
+
+  /** 'amount' or 'percent'. */
+  @Column({ name: 'discount_type', type: 'varchar', length: 10, nullable: true })
+  discountType: string | null;
+
+  /** What the user typed: a flat amount or a percentage. */
+  @Column({ name: 'discount_value', type: 'double', default: 0 })
+  discountValue: number;
+
+  /** The discount in money. */
+  @Column({ name: 'discount_amount', type: 'double', default: 0 })
+  discountAmount: number;
+
+  @Column({ name: 'taxable_amount', type: 'double', nullable: true })
+  taxableAmount: number | null;
+
+  @Column({ name: 'gst_amount', type: 'double', default: 0 })
+  gstAmount: number;
+
+  @Column({ name: 'line_total', type: 'double', nullable: true })
+  lineTotal: number | null;
+
   @Column({ name: 'item_id', type: 'varchar', length: 36, nullable: true })
   itemId: string | null;
 

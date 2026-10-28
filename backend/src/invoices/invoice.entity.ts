@@ -83,6 +83,40 @@ export class Invoice {
   @Column({ name: 'blockchain_transaction_id', type: 'varchar', length: 36, nullable: true })
   blockchainTransactionId: string | null;
 
+  /** How the customer pays: cash, upi, bank or credit (pay later). */
+  @Column({ name: 'payment_type', type: 'varchar', length: 10, nullable: true })
+  paymentType: string | null;
+
+  /** Customer details as they were on this invoice (the customer record may change later). */
+  @Column({ name: 'customer_mobile', type: 'varchar', length: 30, nullable: true })
+  customerMobile: string | null;
+
+  @Column({ name: 'customer_gstin', type: 'varchar', length: 15, nullable: true })
+  customerGstin: string | null;
+
+  @Column({ name: 'billing_address', type: 'varchar', length: 500, nullable: true })
+  billingAddress: string | null;
+
+  /** State code (first two digits of a GSTIN) that decides CGST+SGST versus IGST. */
+  @Column({ name: 'place_of_supply', type: 'varchar', length: 2, nullable: true })
+  placeOfSupply: string | null;
+
+  /** Subtotal minus line discounts; null on invoices made before GST support. */
+  @Column({ name: 'taxable_value', type: 'double', nullable: true })
+  taxableValue: number | null;
+
+  @Column({ type: 'double', default: 0 })
+  cgst: number;
+
+  @Column({ type: 'double', default: 0 })
+  sgst: number;
+
+  @Column({ type: 'double', default: 0 })
+  igst: number;
+
+  @Column({ name: 'round_off', type: 'double', default: 0 })
+  roundOff: number;
+
   @Column({ name: 'created_by', type: 'varchar', length: 36, nullable: true })
   createdBy: string | null;
 

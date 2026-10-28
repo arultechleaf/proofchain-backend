@@ -35,10 +35,22 @@ import { ReportsModule } from './reports/reports.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { HealthModule } from './health/health.module';
 import { EmailOtp } from './email-otp/email-otp.entity';
+import { Notification } from './notifications/notification.entity';
+import { NotificationsModule } from './notifications/notifications.module';
+import { BankAccount, BankTransaction } from './cash-bank/cash-bank.entities';
+import { CashBankModule } from './cash-bank/cash-bank.module';
+import { Expense } from './expenses/expense.entity';
+import { ExpensesModule } from './expenses/expenses.module';
+import { Quotation, QuotationLine } from './quotations/quotation.entities';
+import { QuotationsModule } from './quotations/quotations.module';
+import { RolePermission } from './role-permissions/role-permissions';
+import { RolePermissionsModule } from './role-permissions/role-permissions.module';
+import { DatabaseViewsModule } from './database/views.module';
 
 const ENTITIES = [
   User, Company, Delivery, Approval, BlockchainTransaction, ProofRecord, AuditLog,
-  Party, Item, StockMovement, Invoice, InvoiceLine, Payment, RazorpayOrder, EmailOtp,
+  Party, Item, StockMovement, Invoice, InvoiceLine, Payment, RazorpayOrder, EmailOtp, Notification,
+  BankAccount, BankTransaction, Expense, Quotation, QuotationLine, RolePermission,
 ];
 
 @Module({
@@ -109,6 +121,12 @@ const ENTITIES = [
     InvoicesModule,
     PaymentsModule,
     ReportsModule,
+    NotificationsModule,
+    CashBankModule,
+    ExpensesModule,
+    QuotationsModule,
+    RolePermissionsModule,
+    DatabaseViewsModule,
   ],
 })
 export class AppModule {}

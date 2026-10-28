@@ -36,6 +36,10 @@ export class Company {
   @Column({ nullable: true, length: 500 })
   description: string;
 
+  /** The organization's own GSTIN; its first two digits are the state used for CGST/SGST vs IGST. */
+  @Column({ type: 'varchar', length: 15, nullable: true })
+  gstin: string | null;
+
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 

@@ -1,6 +1,4 @@
-import {
-  Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards, Delete } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
@@ -42,6 +40,13 @@ export class ItemsController {
   @ApiOperation({ summary: 'Get an item' })
   async findOne(@Param('id') id: string, @Request() req) {
     return { data: await this.itemsService.findById(id, req.user) };
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete an item that is not on any invoice or quotation' })
+  async remove(@Param('id') id: string, @Request() req) {
+    await this.itemsService.remove(id, req.user);
+    return { data: { deleted: 1 } };
   }
 
   @Patch(':id')

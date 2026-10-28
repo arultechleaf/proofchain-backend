@@ -1,7 +1,7 @@
 import { Controller, Get, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { OutstandingQueryDto, ReportsService, SalesReportQueryDto } from './reports.service';
+import { OutstandingQueryDto, ReportsService, SalesReportQueryDto, TransactionsQueryDto } from './reports.service';
 
 @ApiTags('reports')
 @ApiBearerAuth('access-token')
@@ -20,6 +20,12 @@ export class ReportsController {
   @ApiOperation({ summary: 'Unpaid invoices with aging buckets' })
   async outstanding(@Query() query: OutstandingQueryDto, @Request() req) {
     return { data: await this.reportsService.outstanding(query, req.user) };
+  }
+
+  @Get('transactions')
+  @ApiOperation({ summary: 'Invoices, bills and payments in one date-ordered list' })
+  async transactions(@Query() query: TransactionsQueryDto, @Request() req) {
+    return { data: await this.reportsService.transactions(query, req.user) };
   }
 
   @Get('stock')

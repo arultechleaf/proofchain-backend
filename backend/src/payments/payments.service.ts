@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import {
@@ -8,7 +8,9 @@ import { Type } from 'class-transformer';
 import { Payment, PaymentDirection } from './payment.entity';
 import { Invoice, InvoiceStatus, InvoiceType } from '../invoices/invoice.entity';
 import { Party } from '../parties/party.entity';
+import { RazorpayOrder } from './razorpay-order.entity';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AuthUser, readScope, round2, writeCompanyId } from '../common/tenant';
 
 export const PAYMENT_METHODS = ['cash', 'bank', 'upi', 'card', 'cheque', 'razorpay', 'other'];
@@ -67,7 +69,34 @@ export class PaymentsService {
     @InjectRepository(Invoice) private readonly invoiceRepo: Repository<Invoice>,
     @InjectRepository(Party) private readonly partyRepo: Repository<Party>,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /** Delete a payment and take it back off the invoice it settled. */
+  async remove(id: string, user: AuthUser): Promise<void> {
+    const companyId = writeCompanyId(user);
+    const removed = await this.paymentRepo.manager.transaction(async (m) => {
+      const payment = await m.findOne(Payment, { where: { id } });
+      if (!payment || payment.companyId !== companyId) throw new NotFoundException('Payment not found');
+      if (await m.count(RazorpayOrder, { where: { paymentRecordId: id } })) {
+        throw new BadRequestException('Online (Razorpay) payments cannot be deleted because the money was really collected');
+      }
+      if (payment.invoiceId) {
+        const invoice = await m.findOne(Invoice, { where: { id: payment.invoiceId } });
+        if (invoice && invoice.status !== InvoiceStatus.CANCELLED) {
+          invoice.paidAmount = round2(Math.max(0, invoice.paidAmount - payment.amount));
+          invoice.status = invoice.paidAmount <= 0 ? InvoiceStatus.ISSUED : invoice.paidAmount >= invoice.total ? InvoiceStatus.PAID : InvoiceStatus.PARTIAL;
+          await m.save(invoice);
+        }
+      }
+      await m.remove(payment);
+      return payment;
+    });
+    await this.audit.log({
+      actorId: user.id, action: 'PAYMENT_DELETED', resourceType: 'payment', resourceId: id,
+      details: { amount: removed.amount, direction: removed.direction, invoiceId: removed.invoiceId },
+    });
+  }
 
   async create(dto: CreatePaymentDto, user: AuthUser): Promise<Payment> {
     return this.record(writeCompanyId(user), dto, user.id);
@@ -141,6 +170,12 @@ export class PaymentsService {
       actorId: actorId ?? undefined, action: 'PAYMENT_RECORDED', resourceType: 'payment', resourceId: payment.id,
       details: { amount, direction: payment.direction, partyId: party.id, invoiceId: payment.invoiceId },
     });
+    await this.notifications.notifyCompany(companyId, {
+      type: 'payment',
+      title: payment.direction === 'in' ? 'Payment received' : 'Payment made',
+      message: `${amount} ${payment.direction === 'in' ? 'received from' : 'paid to'} ${party.name}.`,
+      link: '/payments',
+    }, actorId ?? undefined);
     return payment;
   }
 

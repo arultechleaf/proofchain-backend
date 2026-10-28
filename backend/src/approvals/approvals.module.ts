@@ -6,6 +6,7 @@ import { Approval } from './approval.entity';
 import { Delivery } from '../deliveries/delivery.entity';
 import { BlockchainModule } from '../blockchain/blockchain.module';
 import { AuditModule } from '../audit/audit.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { BlockchainTransaction } from '../blockchain/blockchain-transaction.entity';
 
 @Module({
@@ -13,6 +14,7 @@ import { BlockchainTransaction } from '../blockchain/blockchain-transaction.enti
     TypeOrmModule.forFeature([Approval, Delivery, BlockchainTransaction]),
     BlockchainModule,
     AuditModule,
+    NotificationsModule,
   ],
   providers: [ApprovalsService],
   controllers: [ApprovalsController],
