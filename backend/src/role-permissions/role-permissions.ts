@@ -89,6 +89,32 @@ export class RolePermission {
   updatedAt: Date;
 }
 
+/**
+ * A screen access level given to one particular user. It overrides the level their role gives on that screen
+ * (no row = the user simply gets what their role gets).
+ */
+@Entity('user_screen_permissions')
+@Index(['userId', 'screenId'], { unique: true })
+export class UserScreenPermission {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ name: 'user_id', type: 'int' })
+  userId: number;
+
+  @Column({ name: 'screen_id', type: 'int' })
+  screenId: number;
+
+  @Column({ type: 'varchar', length: 10 })
+  level: AccessLevel;
+
+  @Column({ name: 'updated_by', type: 'int', nullable: true })
+  updatedBy: number | null;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
+}
+
 export const SYSTEM_ROLES: Array<{ key: string; name: string; description: string }> = [
   { key: 'admin', name: 'Administrator', description: 'Full access, manages users, roles and organizations' },
   { key: 'manager', name: 'Manager', description: 'Runs day-to-day billing and deliveries for an organization' },

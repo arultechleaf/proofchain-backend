@@ -6,7 +6,7 @@ import {
   ArrayMinSize, IsArray, IsIn, IsOptional, IsString, Matches, MaxLength, ValidateNested,
 } from 'class-validator';
 import {
-  ACCESS_LEVELS, AccessLevel, Role, RolePermission, SCREEN_DEFS, SYSTEM_ROLES, Screen, defaultLevel,
+  ACCESS_LEVELS, AccessLevel, Role, RolePermission, SCREEN_DEFS, SYSTEM_ROLES, Screen, UserScreenPermission, defaultLevel,
 } from './role-permissions';
 import { User } from '../users/user.entity';
 import { AuditService } from '../audit/audit.service';
@@ -28,6 +28,21 @@ export class UpdatePermissionsDto {
   changes: PermissionChangeDto[];
 }
 
+export class UserScreenChangeDto {
+  /** The screen key, for example "sales". */
+  @IsString() @MaxLength(40)
+  key: string;
+
+  /** A level, or null to go back to what the user's role gives. */
+  @IsOptional() @IsIn(ACCESS_LEVELS)
+  level: AccessLevel | null;
+}
+
+export class SetUserAccessDto {
+  @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => UserScreenChangeDto)
+  screens: UserScreenChangeDto[];
+}
+
 export class CreateRoleDto {
   @IsString() @Matches(/^[a-z][a-z0-9_]{1,29}$/, { message: 'Key must be 2-30 lowercase letters, digits or underscores' })
   key: string;
@@ -47,11 +62,14 @@ export class RolePermissionsService implements OnModuleInit {
   private readonly logger = new Logger(RolePermissionsService.name);
   /** role -> screen -> level; cleared whenever permissions change. */
   private cache: Map<string, Map<string, AccessLevel>> | null = null;
+  /** user id -> screen -> level, for users with their own screen settings. */
+  private userCache: Map<number, Map<string, AccessLevel>> | null = null;
 
   constructor(
     @InjectRepository(RolePermission) private readonly repo: Repository<RolePermission>,
     @InjectRepository(Role) private readonly roles: Repository<Role>,
     @InjectRepository(Screen) private readonly screens: Repository<Screen>,
+    @InjectRepository(UserScreenPermission) private readonly userRepo: Repository<UserScreenPermission>,
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly audit: AuditService,
   ) {}
@@ -124,10 +142,31 @@ export class RolePermissionsService implements OnModuleInit {
     return map;
   }
 
-  /** Level one role has on one screen (used by the API guard). */
+  private async loadUsers(): Promise<Map<number, Map<string, AccessLevel>>> {
+    if (this.userCache) return this.userCache;
+    const map = new Map<number, Map<string, AccessLevel>>();
+    const screenKey = new Map((await this.screens.find()).map((s) => [s.id, s.key]));
+    for (const p of await this.userRepo.find()) {
+      const screen = screenKey.get(p.screenId);
+      if (!screen) continue;
+      if (!map.has(p.userId)) map.set(p.userId, new Map());
+      map.get(p.userId)!.set(screen, p.level);
+    }
+    this.userCache = map;
+    return map;
+  }
+
+  /** Level one role has on one screen. */
   async levelFor(role: string, screen: string): Promise<AccessLevel> {
     if (role === 'admin' && ADMIN_LOCKED.has(screen)) return 'full';
     return (await this.load()).get(role)?.get(screen) ?? defaultLevel(screen, role);
+  }
+
+  /** Level one user has on one screen: their own setting if an administrator gave them one, otherwise their role's (used by the API guard). */
+  async levelForUser(userId: number, role: string, screen: string): Promise<AccessLevel> {
+    if (role === 'admin' && ADMIN_LOCKED.has(screen)) return 'full';
+    const own = (await this.loadUsers()).get(userId)?.get(screen);
+    return own ?? (await this.levelFor(role, screen));
   }
 
   async roleList() {
@@ -136,13 +175,56 @@ export class RolePermissionsService implements OnModuleInit {
   }
 
   /** Every active screen with this user's access level: the sidebar, route guard and action buttons read this. */
-  async forUser(role: string) {
-    const levels = await this.load();
+  async forUser(userId: number, role: string) {
     const screens = await this.screens.find({ where: { isActive: true }, order: { sortOrder: 'ASC' } });
-    return screens.map((s) => ({
+    return Promise.all(screens.map(async (s) => ({
       key: s.key, path: s.path, label: s.label, group: s.group,
-      level: (role === 'admin' && ADMIN_LOCKED.has(s.key) ? 'full' : levels.get(role)?.get(s.key) ?? defaultLevel(s.key, role)) as AccessLevel,
-    }));
+      level: await this.levelForUser(userId, role, s.key),
+    })));
+  }
+
+  /** One user's screens for the admin editor: what their role gives, their own setting (if any) and the result. */
+  async userAccess(userId: number) {
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    const screens = await this.screens.find({ where: { isActive: true }, order: { sortOrder: 'ASC' } });
+    const own = (await this.loadUsers()).get(userId);
+    return {
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, roleId: user.roleId, userCode: user.userCode, isActive: user.isActive },
+      screens: await Promise.all(screens.map(async (s) => {
+        const roleLevel = await this.levelFor(user.role, s.key);
+        const override = own?.get(s.key) ?? null;
+        return { key: s.key, label: s.label, path: s.path, group: s.group, roleLevel, override, level: await this.levelForUser(userId, user.role, s.key) };
+      })),
+    };
+  }
+
+  /** Set or clear a user's own level on several screens at once. A null level removes the user's own setting. */
+  async setUserAccess(userId: number, dto: SetUserAccessDto, actorId: number) {
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    const screenIds = new Map((await this.screens.find()).map((s) => [s.key, s.id]));
+    for (const c of dto.screens) {
+      if (!screenIds.has(c.key)) throw new BadRequestException(`Unknown screen "${c.key}"`);
+      if (user.role === 'admin' && ADMIN_LOCKED.has(c.key) && c.level != null && c.level !== 'full') {
+        throw new BadRequestException('Administrators must keep full access to Users and Roles & permissions');
+      }
+    }
+    for (const c of dto.screens) {
+      const screenId = screenIds.get(c.key)!;
+      const row = await this.userRepo.findOne({ where: { userId, screenId } });
+      if (c.level == null) {
+        if (row) await this.userRepo.remove(row);
+      } else {
+        await this.userRepo.save(Object.assign(row ?? this.userRepo.create({ userId, screenId }), { level: c.level, updatedBy: actorId }));
+      }
+    }
+    this.userCache = null;
+    await this.audit.log({
+      actorId, action: 'USER_SCREEN_ACCESS_UPDATED', resourceType: 'user', resourceId: userId,
+      details: { changes: dto.screens.map((c) => ({ screen: c.key, level: c.level })) },
+    });
+    return this.userAccess(userId);
   }
 
   /** The matrix as the Roles page shows it. */
@@ -188,6 +270,7 @@ export class RolePermissionsService implements OnModuleInit {
       await this.repo.save(row);
     }
     this.cache = null;
+    this.userCache = null;
     await this.audit.log({
       actorId, action: 'ROLE_PERMISSIONS_UPDATED', resourceType: 'role_permission',
       details: { changes: dto.changes },

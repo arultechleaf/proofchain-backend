@@ -1,9 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Screen } from '../auth/screen.decorator';
 import { ScreenGuard } from '../auth/screen.guard';
-import { CreateRoleDto, RolePermissionsService, UpdatePermissionsDto } from './role-permissions.service';
+import { CreateRoleDto, RolePermissionsService, SetUserAccessDto, UpdatePermissionsDto } from './role-permissions.service';
 
 @ApiTags('roles')
 @ApiBearerAuth('access-token')
@@ -16,7 +16,7 @@ export class RolePermissionsController {
   @Get('permissions/me')
   @ApiOperation({ summary: 'Screens and the access level the signed-in user has on each' })
   async mine(@Request() req) {
-    return { data: { role: req.user.role, screens: await this.service.forUser(req.user.role) } };
+    return { data: { role: req.user.role, screens: await this.service.forUser(req.user.id, req.user.role) } };
   }
 
   /** The role list is needed by the user form, so any signed-in user may read it. */
@@ -38,6 +38,20 @@ export class RolePermissionsController {
   @ApiOperation({ summary: 'Change one or more role permissions' })
   async update(@Body() body: UpdatePermissionsDto, @Request() req) {
     return { data: await this.service.update(body, req.user.id) };
+  }
+
+  @Get('users/:id/access')
+  @Screen('roles')
+  @ApiOperation({ summary: "One user's screens: what their role gives, their own setting, and the result" })
+  async userAccess(@Param('id', ParseIntPipe) id: number) {
+    return { data: await this.service.userAccess(id) };
+  }
+
+  @Put('users/:id/access')
+  @Screen('roles')
+  @ApiOperation({ summary: "Give a user their own access level on one or more screens (null = use the role's level)" })
+  async setUserAccess(@Param('id', ParseIntPipe) id: number, @Body() body: SetUserAccessDto, @Request() req) {
+    return { data: await this.service.setUserAccess(id, body, req.user.id) };
   }
 
   @Post()

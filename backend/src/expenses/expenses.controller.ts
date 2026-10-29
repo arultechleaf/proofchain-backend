@@ -8,7 +8,7 @@ import { Screen } from '../auth/screen.decorator';
 @ApiTags('expenses')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard, ScreenGuard)
-@Screen('expenses', { readAlso: ['cash_bank'] })
+@Screen('expenses')
 @Controller('expenses')
 export class ExpensesController {
   constructor(private readonly service: ExpensesService) {}
