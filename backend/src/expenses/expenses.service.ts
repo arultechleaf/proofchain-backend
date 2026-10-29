@@ -122,14 +122,14 @@ export class ExpensesService {
     return (await qb.getRawMany<{ category: string }>()).map((r) => r.category);
   }
 
-  private async find(id: string, user: AuthUser): Promise<Expense> {
+  private async find(id: number, user: AuthUser): Promise<Expense> {
     const expense = await this.repo.findOne({ where: { id } });
     if (!expense) throw new NotFoundException('Expense not found');
     assertAccess(expense.companyId, user, 'Expense');
     return expense;
   }
 
-  async update(id: string, dto: UpdateExpenseDto, user: AuthUser): Promise<Expense> {
+  async update(id: number, dto: UpdateExpenseDto, user: AuthUser): Promise<Expense> {
     writeCompanyId(user);
     const expense = await this.find(id, user);
     if (dto.category !== undefined) expense.category = dto.category.trim();
@@ -142,7 +142,7 @@ export class ExpensesService {
     return this.repo.save(expense);
   }
 
-  async remove(id: string, user: AuthUser): Promise<void> {
+  async remove(id: number, user: AuthUser): Promise<void> {
     writeCompanyId(user);
     const expense = await this.find(id, user);
     await this.repo.remove(expense);

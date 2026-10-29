@@ -11,11 +11,11 @@ export enum PartyType {
 @Entity('parties')
 @Index(['companyId'])
 export class Party {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'company_id', length: 36 })
-  companyId: string;
+  @Column({ name: 'company_id', type: 'int' })
+  companyId: number;
 
   @Column({ length: 150 })
   name: string;

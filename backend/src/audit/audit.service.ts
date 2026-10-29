@@ -4,10 +4,11 @@ import { Repository } from 'typeorm';
 import { AuditLog } from './audit-log.entity';
 
 export interface AuditLogInput {
-  actorId?: string;
+  actorId?: number;
   action: string;
   resourceType: string;
-  resourceId?: string;
+  /** Numeric ids are stored as text because an audit row can point at any kind of record. */
+  resourceId?: string | number;
   details?: Record<string, unknown>;
   ipAddress?: string;
 }
@@ -24,7 +25,7 @@ export class AuditService {
       actorId: input.actorId ?? null,
       action: input.action,
       resourceType: input.resourceType,
-      resourceId: input.resourceId ?? null,
+      resourceId: input.resourceId == null ? null : String(input.resourceId),
       details: input.details ?? null,
       ipAddress: input.ipAddress ?? null,
     });
@@ -35,7 +36,7 @@ export class AuditService {
     page?: number;
     limit?: number;
     resourceType?: string;
-    actorId?: string;
+    actorId?: number;
   }): Promise<{ data: AuditLog[]; total: number }> {
     const page = options?.page ?? 1;
     const limit = Math.min(options?.limit ?? 50, 200);

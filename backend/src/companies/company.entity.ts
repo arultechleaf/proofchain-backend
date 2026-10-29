@@ -16,8 +16,8 @@ export enum CompanyType {
 
 @Entity('companies')
 export class Company {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
   @Column({ length: 100 })
   name: string;

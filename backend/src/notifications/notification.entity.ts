@@ -6,12 +6,12 @@ export type NotificationType = 'delivery' | 'approval' | 'invoice' | 'payment' |
 @Index(['userId', 'isRead'])
 @Index(['userId', 'createdAt'])
 export class Notification {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
   /** Recipient. */
-  @Column({ name: 'user_id', length: 36 })
-  userId: string;
+  @Column({ name: 'user_id', type: 'int' })
+  userId: number;
 
   @Column({ type: 'varchar', length: 20, default: 'system' })
   type: NotificationType;

@@ -1,13 +1,16 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards, Delete } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards, Delete, ParseIntPipe } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   CreateQuotationDto, QuotationQueryDto, QuotationsService, UpdateQuotationStatusDto,
 } from './quotations.service';
+import { ScreenGuard } from '../auth/screen.guard';
+import { Screen } from '../auth/screen.decorator';
 
 @ApiTags('quotations')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ScreenGuard)
+@Screen('quotations', { readAlso: ['sales_create'] })
 @Controller('quotations')
 export class QuotationsController {
   constructor(private readonly service: QuotationsService) {}
@@ -26,26 +29,26 @@ export class QuotationsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'One quotation with its lines' })
-  async findOne(@Param('id') id: string, @Request() req) {
+  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {
     return { data: await this.service.findById(id, req.user) };
   }
 
   @Patch(':id/status')
   @ApiOperation({ summary: 'Mark a quotation draft, sent, accepted or rejected' })
-  async setStatus(@Param('id') id: string, @Body() body: UpdateQuotationStatusDto, @Request() req) {
+  async setStatus(@Param('id', ParseIntPipe) id: number, @Body() body: UpdateQuotationStatusDto, @Request() req) {
     return { data: await this.service.setStatus(id, body.status, req.user) };
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a quotation that was not converted' })
-  async remove(@Param('id') id: string, @Request() req) {
+  async remove(@Param('id', ParseIntPipe) id: number, @Request() req) {
     await this.service.remove(id, req.user);
     return { data: { deleted: 1 } };
   }
 
   @Post(':id/convert')
   @ApiOperation({ summary: 'Convert a quotation into a sales invoice' })
-  async convert(@Param('id') id: string, @Request() req) {
+  async convert(@Param('id', ParseIntPipe) id: number, @Request() req) {
     return { data: await this.service.convert(id, req.user) };
   }
 }

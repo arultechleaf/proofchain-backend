@@ -5,11 +5,13 @@ import { AuditService } from './audit.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { ScreenGuard } from '../auth/screen.guard';
+import { Screen } from '../auth/screen.decorator';
 
 @ApiTags('audit')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'auditor')
+@UseGuards(JwtAuthGuard, ScreenGuard)
+@Screen('audit')
 @Controller('audit')
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}

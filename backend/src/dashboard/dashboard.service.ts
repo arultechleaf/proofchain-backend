@@ -24,7 +24,7 @@ export class DashboardService {
       : `strftime('%Y-%m-%d', ${column})`;
   }
 
-  async getSummary(actorRole: string, actorCompanyId: string | null) {
+  async getSummary(actorRole: string, actorCompanyId: number | null) {
     const [total, pending, approved, rejected, txCount, confirmedTx] =
       await Promise.all([
         this.deliveryRepo.count(),

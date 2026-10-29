@@ -1,21 +1,22 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
 export interface AuthUser {
-  id: string;
+  id: number;
   email: string;
   role: string;
-  companyId: string | null;
+  companyId: number | null;
   name: string;
 }
 
 /** Company filter for reads. Admins and auditors see every company; others only their own. */
-export function readScope(user: AuthUser): string | undefined {
+export function readScope(user: AuthUser): number | undefined {
   if (user.role === 'admin' || user.role === 'auditor') return undefined;
-  return user.companyId ?? '__none__';
+  // ids start at 1, so 0 matches no company for an account that has none
+  return user.companyId ?? 0;
 }
 
 /** Company that owns new records. Auditors are read-only; the user must belong to a company. */
-export function writeCompanyId(user: AuthUser): string {
+export function writeCompanyId(user: AuthUser): number {
   if (user.role === 'auditor') {
     throw new ForbiddenException('Auditors have read-only access');
   }
@@ -28,9 +29,9 @@ export function writeCompanyId(user: AuthUser): string {
 }
 
 /** Throws 404 when a record belongs to another company. */
-export function assertAccess(recordCompanyId: string, user: AuthUser, what = 'Record'): void {
+export function assertAccess(recordCompanyId: number, user: AuthUser, what = 'Record'): void {
   const scope = readScope(user);
-  if (scope && scope !== recordCompanyId) throw new NotFoundException(`${what} not found`);
+  if (scope !== undefined && scope !== recordCompanyId) throw new NotFoundException(`${what} not found`);
 }
 
 export function round2(n: number): number {

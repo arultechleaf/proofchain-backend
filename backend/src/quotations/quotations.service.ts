@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Type } from 'class-transformer';
 import {
-  ArrayMinSize, IsArray, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, ValidateNested,
+  ArrayMinSize, IsArray, IsEnum, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, ValidateNested,
 } from 'class-validator';
 import { Quotation, QuotationLine, QuotationStatus } from './quotation.entities';
 import { Party } from '../parties/party.entity';
@@ -16,8 +16,8 @@ import { AuthUser, assertAccess, readScope, round2, writeCompanyId } from '../co
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export class QuotationLineDto {
-  @IsOptional() @IsUUID()
-  itemId?: string;
+  @IsOptional() @Type(() => Number) @IsInt()
+  itemId?: number;
 
   @IsOptional() @IsString() @MaxLength(255)
   description?: string;
@@ -33,8 +33,8 @@ export class QuotationLineDto {
 }
 
 export class CreateQuotationDto {
-  @IsUUID()
-  partyId: string;
+  @Type(() => Number) @IsInt()
+  partyId: number;
 
   @IsOptional() @Matches(ISO_DATE, { message: 'quotationDate must be YYYY-MM-DD' })
   quotationDate?: string;
@@ -136,7 +136,7 @@ export class QuotationsService {
     return { data, total, page, limit };
   }
 
-  async findById(id: string, user: AuthUser): Promise<Quotation> {
+  async findById(id: number, user: AuthUser): Promise<Quotation> {
     const quotation = await this.repo.findOne({ where: { id }, relations: { party: true, lines: true } });
     if (!quotation) throw new NotFoundException('Quotation not found');
     assertAccess(quotation.companyId, user, 'Quotation');
@@ -144,7 +144,7 @@ export class QuotationsService {
     return quotation;
   }
 
-  async setStatus(id: string, status: QuotationStatus, user: AuthUser): Promise<Quotation> {
+  async setStatus(id: number, status: QuotationStatus, user: AuthUser): Promise<Quotation> {
     writeCompanyId(user);
     const quotation = await this.findById(id, user);
     if (quotation.status === QuotationStatus.CONVERTED) throw new BadRequestException('This quotation was already converted to an invoice');
@@ -158,7 +158,7 @@ export class QuotationsService {
   }
 
   /** Delete a quotation that has not been turned into an invoice. */
-  async remove(id: string, user: AuthUser): Promise<void> {
+  async remove(id: number, user: AuthUser): Promise<void> {
     writeCompanyId(user);
     const quotation = await this.findById(id, user);
     if (quotation.status === QuotationStatus.CONVERTED) {
@@ -172,7 +172,7 @@ export class QuotationsService {
   }
 
   /** Create a sales invoice from the quotation. Stock and number checks happen in the invoice service. */
-  async convert(id: string, user: AuthUser) {
+  async convert(id: number, user: AuthUser) {
     writeCompanyId(user);
     const quotation = await this.findById(id, user);
     if (quotation.status === QuotationStatus.CONVERTED) throw new BadRequestException('This quotation was already converted');
@@ -198,7 +198,7 @@ export class QuotationsService {
     return { quotation: await this.findById(id, user), invoice };
   }
 
-  private async nextNumber(companyId: string): Promise<string> {
+  private async nextNumber(companyId: number): Promise<string> {
     const count = await this.repo.count({ where: { companyId } });
     const year = new Date().getFullYear();
     for (let n = count + 1; ; n++) {

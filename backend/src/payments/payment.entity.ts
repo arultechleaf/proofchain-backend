@@ -15,21 +15,21 @@ export enum PaymentDirection {
 @Index(['companyId'])
 @Index(['partyId'])
 export class Payment {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'company_id', length: 36 })
-  companyId: string;
+  @Column({ name: 'company_id', type: 'int' })
+  companyId: number;
 
-  @Column({ name: 'party_id', length: 36 })
-  partyId: string;
+  @Column({ name: 'party_id', type: 'int' })
+  partyId: number;
 
   @ManyToOne(() => Party, { eager: false })
   @JoinColumn({ name: 'party_id' })
   party: Party;
 
-  @Column({ name: 'invoice_id', type: 'varchar', length: 36, nullable: true })
-  invoiceId: string | null;
+  @Column({ name: 'invoice_id', type: 'int', nullable: true })
+  invoiceId: number | null;
 
   @ManyToOne(() => Invoice, { eager: false, nullable: true })
   @JoinColumn({ name: 'invoice_id' })
@@ -54,8 +54,8 @@ export class Payment {
   @Column({ type: 'varchar', length: 500, nullable: true })
   notes: string | null;
 
-  @Column({ name: 'created_by', type: 'varchar', length: 36, nullable: true })
-  createdBy: string | null;
+  @Column({ name: 'created_by', type: 'int', nullable: true })
+  createdBy: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

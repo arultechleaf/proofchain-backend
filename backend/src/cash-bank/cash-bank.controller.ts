@@ -1,13 +1,16 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards, Delete } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards, Delete, ParseIntPipe } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
   BankTransactionQueryDto, CashBankService, CreateAccountDto, CreateBankTransactionDto, TransferDto, UpdateAccountDto,
 } from './cash-bank.service';
+import { ScreenGuard } from '../auth/screen.guard';
+import { Screen } from '../auth/screen.decorator';
 
 @ApiTags('cash-bank')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ScreenGuard)
+@Screen('cash_bank', { readAlso: ['payments', 'expenses', 'accounts'] })
 @Controller('cash-bank')
 export class CashBankController {
   constructor(private readonly service: CashBankService) {}
@@ -26,20 +29,20 @@ export class CashBankController {
 
   @Patch('accounts/:id')
   @ApiOperation({ summary: 'Rename, deactivate or edit an account' })
-  async updateAccount(@Param('id') id: string, @Body() body: UpdateAccountDto, @Request() req) {
+  async updateAccount(@Param('id', ParseIntPipe) id: number, @Body() body: UpdateAccountDto, @Request() req) {
     return { data: await this.service.updateAccount(id, body, req.user) };
   }
 
   @Delete('accounts/:id')
   @ApiOperation({ summary: 'Delete an account that has no transactions' })
-  async removeAccount(@Param('id') id: string, @Request() req) {
+  async removeAccount(@Param('id', ParseIntPipe) id: number, @Request() req) {
     await this.service.removeAccount(id, req.user);
     return { data: { deleted: 1 } };
   }
 
   @Delete('transactions/:id')
   @ApiOperation({ summary: 'Delete a deposit, withdrawal or transfer' })
-  async removeTransaction(@Param('id') id: string, @Request() req) {
+  async removeTransaction(@Param('id', ParseIntPipe) id: number, @Request() req) {
     await this.service.removeTransaction(id, req.user);
     return { data: { deleted: 1 } };
   }

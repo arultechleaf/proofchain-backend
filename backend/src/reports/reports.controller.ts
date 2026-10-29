@@ -2,10 +2,13 @@ import { Controller, Get, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OutstandingQueryDto, ReportsService, SalesReportQueryDto, TransactionsQueryDto } from './reports.service';
+import { ScreenGuard } from '../auth/screen.guard';
+import { Screen } from '../auth/screen.decorator';
 
 @ApiTags('reports')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ScreenGuard)
+@Screen('reports', { readAlso: ['dashboard', 'billing', 'accounts', 'inventory'] })
 @Controller('reports')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}

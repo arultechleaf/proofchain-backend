@@ -107,7 +107,7 @@ export class PartiesService {
     return { data, total, page, limit };
   }
 
-  async findById(id: string, user: AuthUser): Promise<Party> {
+  async findById(id: number, user: AuthUser): Promise<Party> {
     const party = await this.partyRepo.findOne({ where: { id } });
     if (!party) throw new NotFoundException('Party not found');
     assertAccess(party.companyId, user, 'Party');
@@ -115,7 +115,7 @@ export class PartiesService {
   }
 
   /** Delete a customer/supplier that has no documents. Otherwise it should be marked inactive. */
-  async remove(id: string, user: AuthUser): Promise<void> {
+  async remove(id: number, user: AuthUser): Promise<void> {
     writeCompanyId(user);
     const party = await this.findById(id, user);
     const [invoices, payments, quotations] = await Promise.all([
@@ -132,7 +132,7 @@ export class PartiesService {
     await this.audit.log({ actorId: user.id, action: 'PARTY_DELETED', resourceType: 'party', resourceId: id, details: { name: party.name } });
   }
 
-  async update(id: string, dto: UpdatePartyDto, user: AuthUser): Promise<Party> {
+  async update(id: number, dto: UpdatePartyDto, user: AuthUser): Promise<Party> {
     writeCompanyId(user);
     const party = await this.findById(id, user);
     const { name, ...rest } = dto;
@@ -148,7 +148,7 @@ export class PartiesService {
   }
 
   /** Party details plus invoices, payments and the running balance. */
-  async getLedger(id: string, user: AuthUser) {
+  async getLedger(id: number, user: AuthUser) {
     const party = await this.findById(id, user);
     const [invoices, payments] = await Promise.all([
       this.invoiceRepo.find({ where: { partyId: id }, order: { invoiceDate: 'DESC', createdAt: 'DESC' } }),

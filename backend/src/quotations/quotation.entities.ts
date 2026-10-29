@@ -16,17 +16,17 @@ export enum QuotationStatus {
 @Index(['companyId'])
 @Index(['companyId', 'quotationNumber'], { unique: true })
 export class Quotation {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'company_id', length: 36 })
-  companyId: string;
+  @Column({ name: 'company_id', type: 'int' })
+  companyId: number;
 
   @Column({ name: 'quotation_number', length: 50 })
   quotationNumber: string;
 
-  @Column({ name: 'party_id', length: 36 })
-  partyId: string;
+  @Column({ name: 'party_id', type: 'int' })
+  partyId: number;
 
   @ManyToOne(() => Party, { eager: false })
   @JoinColumn({ name: 'party_id' })
@@ -60,11 +60,11 @@ export class Quotation {
   notes: string | null;
 
   /** Set when the quotation is converted. */
-  @Column({ name: 'converted_invoice_id', type: 'varchar', length: 36, nullable: true })
-  convertedInvoiceId: string | null;
+  @Column({ name: 'converted_invoice_id', type: 'int', nullable: true })
+  convertedInvoiceId: number | null;
 
-  @Column({ name: 'created_by', type: 'varchar', length: 36, nullable: true })
-  createdBy: string | null;
+  @Column({ name: 'created_by', type: 'int', nullable: true })
+  createdBy: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
@@ -76,11 +76,11 @@ export class Quotation {
 @Entity('quotation_lines')
 @Index(['quotationId'])
 export class QuotationLine {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'quotation_id', length: 36 })
-  quotationId: string;
+  @Column({ name: 'quotation_id', type: 'int' })
+  quotationId: number;
 
   @ManyToOne(() => Quotation, (q) => q.lines, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'quotation_id' })
@@ -89,8 +89,8 @@ export class QuotationLine {
   @Column({ type: 'integer', default: 0 })
   position: number;
 
-  @Column({ name: 'item_id', type: 'varchar', length: 36, nullable: true })
-  itemId: string | null;
+  @Column({ name: 'item_id', type: 'int', nullable: true })
+  itemId: number | null;
 
   @Column({ length: 255 })
   description: string;

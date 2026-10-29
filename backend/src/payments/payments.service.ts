@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import {
-  IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Matches, MaxLength, Min,
+  IsEnum, IsInt, IsNumber, IsOptional, IsString, Matches, MaxLength, Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Payment, PaymentDirection } from './payment.entity';
@@ -16,12 +16,12 @@ import { AuthUser, readScope, round2, writeCompanyId } from '../common/tenant';
 export const PAYMENT_METHODS = ['cash', 'bank', 'upi', 'card', 'cheque', 'razorpay', 'other'];
 
 export class CreatePaymentDto {
-  @IsUUID()
-  partyId: string;
+  @Type(() => Number) @IsInt()
+  partyId: number;
 
   /** Settle a specific invoice. Omit for an advance / on-account payment. */
-  @IsOptional() @IsUUID()
-  invoiceId?: string;
+  @IsOptional() @Type(() => Number) @IsInt()
+  invoiceId?: number;
 
   @IsEnum(PaymentDirection)
   direction: PaymentDirection;
@@ -46,8 +46,8 @@ export class PaymentQueryDto {
   @IsOptional() @IsString()
   direction?: string;
 
-  @IsOptional() @IsString()
-  partyId?: string;
+  @IsOptional() @Type(() => Number) @IsInt()
+  partyId?: number;
 
   @IsOptional() @IsString()
   from?: string;
@@ -73,7 +73,7 @@ export class PaymentsService {
   ) {}
 
   /** Delete a payment and take it back off the invoice it settled. */
-  async remove(id: string, user: AuthUser): Promise<void> {
+  async remove(id: number, user: AuthUser): Promise<void> {
     const companyId = writeCompanyId(user);
     const removed = await this.paymentRepo.manager.transaction(async (m) => {
       const payment = await m.findOne(Payment, { where: { id } });
@@ -107,9 +107,9 @@ export class PaymentsService {
    * online payments (Razorpay). Pass `outer` to take part in the caller's transaction.
    */
   async record(
-    companyId: string,
+    companyId: number,
     dto: CreatePaymentDto,
-    actorId: string | null,
+    actorId: number | null,
     outer?: EntityManager,
   ): Promise<Payment> {
     const method = dto.method ?? 'cash';

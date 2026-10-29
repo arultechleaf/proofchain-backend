@@ -9,7 +9,9 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { IsNumber, IsOptional, IsString, IsUUID, Min, MaxLength } from 'class-validator';
+import {
+  IsNumber, IsOptional, IsString, Min, MaxLength, IsInt,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import * as crypto from 'crypto';
 import { RazorpayOrder } from './razorpay-order.entity';
@@ -20,8 +22,8 @@ import { AuditService } from '../audit/audit.service';
 import { AuthUser, assertAccess, round2, writeCompanyId } from '../common/tenant';
 
 export class CreateRazorpayOrderDto {
-  @IsUUID()
-  invoiceId: string;
+  @Type(() => Number) @IsInt()
+  invoiceId: number;
 
   /** Rupees. Defaults to the full balance due; may be less for a part payment. */
   @IsOptional() @IsNumber() @Min(1) @Type(() => Number)
@@ -241,7 +243,7 @@ export class RazorpayService {
    * Mark the order paid and record the Payment, exactly once. The conditional update is the
    * gate: whichever of verify/webhook gets there first wins and the other becomes a no-op.
    */
-  private async settle(orderId: string, paymentId: string, actorId: string | null): Promise<RazorpayOrder> {
+  private async settle(orderId: string, paymentId: string, actorId: number | null): Promise<RazorpayOrder> {
     await this.orderRepo.manager.transaction(async (manager) => {
       const claimed = await manager.update(
         RazorpayOrder,

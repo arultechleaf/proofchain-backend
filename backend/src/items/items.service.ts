@@ -128,7 +128,7 @@ export class ItemsService {
     return { data, total, page, limit };
   }
 
-  async findById(id: string, user: AuthUser): Promise<Item> {
+  async findById(id: number, user: AuthUser): Promise<Item> {
     const item = await this.itemRepo.findOne({ where: { id } });
     if (!item) throw new NotFoundException('Item not found');
     assertAccess(item.companyId, user, 'Item');
@@ -136,7 +136,7 @@ export class ItemsService {
   }
 
   /** Delete an item that was never sold, bought or quoted. Otherwise it should be marked inactive. */
-  async remove(id: string, user: AuthUser): Promise<void> {
+  async remove(id: number, user: AuthUser): Promise<void> {
     writeCompanyId(user);
     const item = await this.itemRepo.findOne({ where: { id } });
     if (!item) throw new NotFoundException('Item not found');
@@ -158,7 +158,7 @@ export class ItemsService {
     await this.audit.log({ actorId: user.id, action: 'ITEM_DELETED', resourceType: 'item', resourceId: id, details: { name: item.name } });
   }
 
-  async update(id: string, dto: UpdateItemDto, user: AuthUser): Promise<Item> {
+  async update(id: number, dto: UpdateItemDto, user: AuthUser): Promise<Item> {
     writeCompanyId(user);
     const item = await this.findById(id, user);
     // Stock changes go through movements so the history stays accurate.
@@ -172,7 +172,7 @@ export class ItemsService {
     return saved;
   }
 
-  async adjustStock(id: string, dto: AdjustStockDto, user: AuthUser): Promise<Item> {
+  async adjustStock(id: number, dto: AdjustStockDto, user: AuthUser): Promise<Item> {
     writeCompanyId(user);
     const item = await this.findById(id, user);
     if (dto.change === 0) throw new BadRequestException('Change must not be zero');
@@ -189,7 +189,7 @@ export class ItemsService {
     return this.findById(id, user);
   }
 
-  async movements(user: AuthUser, itemId?: string, limit = 50) {
+  async movements(user: AuthUser, itemId?: number, limit = 50) {
     const qb = this.moveRepo
       .createQueryBuilder('m')
       .leftJoinAndSelect('m.item', 'item')
@@ -223,11 +223,11 @@ export class ItemsService {
    */
   async moveStock(
     manager: EntityManager,
-    itemId: string,
+    itemId: number,
     change: number,
     reason: StockReason,
     reference: string | null,
-    actorId: string | null,
+    actorId: number | null,
   ): Promise<void> {
     const item = await manager.findOneByOrFail(Item, { id: itemId });
     item.stock = round2(item.stock + change);

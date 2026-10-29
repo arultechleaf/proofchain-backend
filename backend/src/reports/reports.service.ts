@@ -72,8 +72,8 @@ export class ReportsService {
 
     const daily = new Map<string, { date: string; total: number; count: number }>();
     for (let d = from; d <= to; d = this.daysBefore(d, -1)) daily.set(d, { date: d, total: 0, count: 0 });
-    const parties = new Map<string, { partyId: string; name: string; total: number; count: number }>();
-    const items = new Map<string, { description: string; quantity: number; amount: number }>();
+    const parties = new Map<number, { partyId: number; name: string; total: number; count: number }>();
+    const items = new Map<number | string, { description: string; quantity: number; amount: number }>();
 
     for (const i of invoices) {
       const day = daily.get(i.invoiceDate);

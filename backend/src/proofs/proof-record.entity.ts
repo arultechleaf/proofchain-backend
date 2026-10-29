@@ -21,11 +21,11 @@ export enum VerificationStatus {
 @Entity('proof_records')
 @Index(['deliveryId'])
 export class ProofRecord {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'delivery_id' })
-  deliveryId: string;
+  @Column({ name: 'delivery_id', type: 'int' })
+  deliveryId: number;
 
   @ManyToOne(() => Delivery, { eager: false })
   @JoinColumn({ name: 'delivery_id' })
@@ -37,8 +37,8 @@ export class ProofRecord {
   @Column({ name: 'payload_hash', length: 128 })
   payloadHash: string;
 
-  @Column({ name: 'blockchain_transaction_id', type: 'varchar', length: 36, nullable: true })
-  blockchainTransactionId: string | null;
+  @Column({ name: 'blockchain_transaction_id', type: 'int', nullable: true })
+  blockchainTransactionId: number | null;
 
   @ManyToOne(() => BlockchainTransaction, { eager: false, nullable: true })
   @JoinColumn({ name: 'blockchain_transaction_id' })

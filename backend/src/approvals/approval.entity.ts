@@ -18,18 +18,18 @@ export enum ApprovalDecision {
 @Entity('approvals')
 @Index(['deliveryId'])
 export class Approval {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'delivery_id' })
-  deliveryId: string;
+  @Column({ name: 'delivery_id', type: 'int' })
+  deliveryId: number;
 
   @ManyToOne(() => Delivery, { eager: false })
   @JoinColumn({ name: 'delivery_id' })
   delivery: Delivery;
 
-  @Column({ name: 'reviewer_id' })
-  reviewerId: string;
+  @Column({ name: 'reviewer_id', type: 'int' })
+  reviewerId: number;
 
   @ManyToOne(() => User, { eager: false })
   @JoinColumn({ name: 'reviewer_id' })

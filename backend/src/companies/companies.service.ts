@@ -43,7 +43,7 @@ export class CompaniesService {
     return this.companyRepo.find({ order: { name: 'ASC' } });
   }
 
-  async findById(id: string): Promise<Company | null> {
+  async findById(id: number): Promise<Company | null> {
     return this.companyRepo.findOne({ where: { id } });
   }
 
@@ -52,7 +52,7 @@ export class CompaniesService {
   }
 
   /** Organization with its members (secrets stripped). */
-  async getDetail(id: string) {
+  async getDetail(id: number) {
     const company = await this.findById(id);
     if (!company) throw new NotFoundException('Organization not found');
     const users = await this.userRepo.find({ where: { companyId: id }, order: { name: 'ASC' } });
@@ -62,7 +62,7 @@ export class CompaniesService {
     };
   }
 
-  async create(dto: CreateCompanyDto, actorId: string): Promise<Company> {
+  async create(dto: CreateCompanyDto, actorId: number): Promise<Company> {
     const code = dto.organizationCode.trim().toUpperCase();
     if (await this.findByCode(code)) throw new ConflictException(`Organization code ${code} is already used`);
     const company = await this.companyRepo.save(
@@ -81,7 +81,7 @@ export class CompaniesService {
     return company;
   }
 
-  async update(id: string, dto: UpdateCompanyDto, actorId: string): Promise<Company> {
+  async update(id: number, dto: UpdateCompanyDto, actorId: number): Promise<Company> {
     const company = await this.findById(id);
     if (!company) throw new NotFoundException('Organization not found');
 

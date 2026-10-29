@@ -4,11 +4,11 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 
 @Entity('expenses')
 @Index(['companyId', 'expenseDate'])
 export class Expense {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'company_id', length: 36 })
-  companyId: string;
+  @Column({ name: 'company_id', type: 'int' })
+  companyId: number;
 
   @Column({ length: 60 })
   category: string;
@@ -28,8 +28,8 @@ export class Expense {
   @Column({ type: 'varchar', length: 100, nullable: true })
   reference: string | null;
 
-  @Column({ name: 'created_by', type: 'varchar', length: 36, nullable: true })
-  createdBy: string | null;
+  @Column({ name: 'created_by', type: 'int', nullable: true })
+  createdBy: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

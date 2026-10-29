@@ -46,23 +46,20 @@ export class ApprovalsService {
   ) {}
 
   async createApproval(
-    deliveryId: string,
+    deliveryId: number,
     dto: CreateApprovalDto,
-    reviewerId: string,
+    reviewerId: number,
     reviewerRole: string,
-    reviewerCompanyId: string | null,
+    reviewerCompanyId: number | null,
   ): Promise<Approval> {
-    // Only Company B can approve/reject deliveries
-    if (reviewerRole !== UserRole.COMPANY_B && reviewerRole !== UserRole.ADMIN) {
-      throw new ForbiddenException('Only Company B can approve or reject deliveries');
-    }
+    // Who may approve is decided by the role permission matrix (screen "approvals"), enforced by ScreenGuard.
 
     const delivery = await this.deliveryRepo.findOne({ where: { id: deliveryId } });
     if (!delivery) throw new NotFoundException(`Delivery ${deliveryId} not found`);
 
     // Ensure the reviewer belongs to the receiver company
     if (
-      reviewerRole === UserRole.COMPANY_B &&
+      reviewerRole !== UserRole.ADMIN &&
       reviewerCompanyId &&
       delivery.receiverCompanyId !== reviewerCompanyId
     ) {
@@ -123,7 +120,7 @@ export class ApprovalsService {
     return approval;
   }
 
-  async getApprovalsByDelivery(deliveryId: string): Promise<Approval[]> {
+  async getApprovalsByDelivery(deliveryId: number): Promise<Approval[]> {
     return this.approvalRepo.find({
       where: { deliveryId },
       relations: { reviewer: true },

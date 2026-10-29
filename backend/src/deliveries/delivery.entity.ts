@@ -32,21 +32,21 @@ export enum BlockchainStatus {
 @Index(['senderCompanyId'])
 @Index(['receiverCompanyId'])
 export class Delivery {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
   @Column({ name: 'delivery_reference', unique: true, length: 100 })
   deliveryReference: string;
 
-  @Column({ name: 'sender_company_id' })
-  senderCompanyId: string;
+  @Column({ name: 'sender_company_id', type: 'int' })
+  senderCompanyId: number;
 
   @ManyToOne(() => Company, { eager: false })
   @JoinColumn({ name: 'sender_company_id' })
   senderCompany: Company;
 
-  @Column({ name: 'receiver_company_id' })
-  receiverCompanyId: string;
+  @Column({ name: 'receiver_company_id', type: 'int' })
+  receiverCompanyId: number;
 
   @ManyToOne(() => Company, { eager: false })
   @JoinColumn({ name: 'receiver_company_id' })
@@ -79,8 +79,8 @@ export class Delivery {
   })
   blockchainStatus: BlockchainStatus;
 
-  @Column({ name: 'created_by' })
-  createdBy: string;
+  @Column({ name: 'created_by', type: 'int' })
+  createdBy: number;
 
   @ManyToOne(() => User, { eager: false, nullable: true })
   @JoinColumn({ name: 'created_by' })

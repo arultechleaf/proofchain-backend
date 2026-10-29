@@ -22,7 +22,9 @@ import { BlockchainService } from '../blockchain/blockchain.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UserRole } from '../users/user.entity';
-import { IsString, IsInt, IsOptional, IsUUID, Min, IsObject } from 'class-validator';
+import {
+  IsString, IsInt, IsOptional, Min, IsObject,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -32,8 +34,8 @@ export class CreateDeliveryDto {
   deliveryReference: string;
 
   @ApiProperty({ description: 'UUID of the receiver company' })
-  @IsUUID()
-  receiverCompanyId: string;
+  @Type(() => Number) @IsInt()
+  receiverCompanyId: number;
 
   @ApiProperty({ example: 'Electronic components shipment' })
   @IsString()
@@ -87,14 +89,11 @@ export class DeliveriesService {
 
   async create(
     dto: CreateDeliveryDto,
-    actorId: string,
-    senderCompanyId: string,
+    actorId: number,
+    senderCompanyId: number,
     actorRole: string,
   ): Promise<Delivery> {
-    // Only Company A users can create deliveries
-    if (actorRole !== UserRole.COMPANY_A && actorRole !== UserRole.ADMIN) {
-      throw new ForbiddenException('Only Company A can create deliveries');
-    }
+    // Who may create deliveries is decided by the role permission matrix (screen "deliveries_create"), enforced by ScreenGuard.
 
     // Check for duplicate reference
     const existing = await this.deliveryRepo.findOne({
@@ -201,7 +200,7 @@ export class DeliveriesService {
   async findAll(
     query: DeliveryQueryDto,
     actorRole: string,
-    actorCompanyId: string | null,
+    actorCompanyId: number | null,
   ): Promise<{ data: Delivery[]; total: number; page: number; limit: number }> {
     const page = query.page ?? 1;
     const limit = Math.min(query.limit ?? 20, 100);
@@ -221,6 +220,9 @@ export class DeliveriesService {
       qb.andWhere('d.senderCompanyId = :companyId', { companyId: actorCompanyId });
     } else if (actorRole === UserRole.COMPANY_B && actorCompanyId) {
       qb.andWhere('d.receiverCompanyId = :companyId', { companyId: actorCompanyId });
+    } else if (actorRole !== UserRole.ADMIN && actorRole !== UserRole.AUDITOR) {
+      // managers, users and custom roles see deliveries their organization sends or receives
+      qb.andWhere('(d.senderCompanyId = :companyId OR d.receiverCompanyId = :companyId)', { companyId: actorCompanyId ?? '__none__' });
     }
     // AUDITOR and ADMIN see all deliveries
 
@@ -238,7 +240,7 @@ export class DeliveriesService {
     return { data, total, page, limit };
   }
 
-  async findById(id: string): Promise<Delivery> {
+  async findById(id: number): Promise<Delivery> {
     const delivery = await this.deliveryRepo.findOne({
       where: { id },
       relations: { senderCompany: true, receiverCompany: true, creator: true },
@@ -247,7 +249,7 @@ export class DeliveriesService {
     return delivery;
   }
 
-  async getProofDetails(deliveryId: string) {
+  async getProofDetails(deliveryId: number) {
     const proof = await this.proofRepo.findOne({
       where: { deliveryId },
       relations: { blockchainTransaction: true },

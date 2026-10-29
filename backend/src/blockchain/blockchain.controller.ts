@@ -2,10 +2,13 @@ import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { BlockchainService } from './blockchain.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ScreenGuard } from '../auth/screen.guard';
+import { Screen } from '../auth/screen.decorator';
 
 @ApiTags('blockchain')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ScreenGuard)
+@Screen('explorer', { readAlso: ['verification', 'deliveries', 'sales', 'purchases', 'dashboard'] })
 @Controller('blockchain')
 export class BlockchainController {
   constructor(private readonly blockchainService: BlockchainService) {}

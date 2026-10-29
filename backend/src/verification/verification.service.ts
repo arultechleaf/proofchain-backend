@@ -7,7 +7,7 @@ import { BlockchainService } from '../blockchain/blockchain.service';
 import { AuditService } from '../audit/audit.service';
 
 export interface VerificationResult {
-  deliveryId: string;
+  deliveryId: number;
   deliveryReference: string;
   status: VerificationStatus;
   expectedHash: string | null;
@@ -36,8 +36,8 @@ export class VerificationService {
   ) {}
 
   async verifyDelivery(
-    deliveryId: string,
-    actorId: string,
+    deliveryId: number,
+    actorId: number,
   ): Promise<VerificationResult> {
     const delivery = await this.deliveryRepo.findOne({
       where: { id: deliveryId },

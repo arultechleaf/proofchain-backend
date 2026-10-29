@@ -1,11 +1,14 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Request, ParseIntPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ApprovalsService, CreateApprovalDto } from './approvals.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ScreenGuard } from '../auth/screen.guard';
+import { Screen } from '../auth/screen.decorator';
 
 @ApiTags('approvals')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ScreenGuard)
+@Screen('approvals', { readAlso: ['deliveries'] })
 @Controller('deliveries/:id/approvals')
 export class ApprovalsController {
   constructor(private readonly approvalsService: ApprovalsService) {}
@@ -13,7 +16,7 @@ export class ApprovalsController {
   @Post()
   @ApiOperation({ summary: 'Approve or reject a delivery (Company B only)' })
   async create(
-    @Param('id') deliveryId: string,
+    @Param('id', ParseIntPipe) deliveryId: number,
     @Body() dto: CreateApprovalDto,
     @Request() req,
   ) {
@@ -29,7 +32,7 @@ export class ApprovalsController {
 
   @Get()
   @ApiOperation({ summary: 'Get approval history for a delivery' })
-  async findAll(@Param('id') deliveryId: string) {
+  async findAll(@Param('id', ParseIntPipe) deliveryId: number) {
     const approvals = await this.approvalsService.getApprovalsByDelivery(deliveryId);
     return { data: approvals };
   }

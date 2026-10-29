@@ -26,15 +26,15 @@ export enum BlockchainTxType {
 @Index(['deliveryId'])
 @Index(['invoiceId'])
 export class BlockchainTransaction {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'delivery_id', type: 'varchar', length: 36, nullable: true })
-  deliveryId: string | null;
+  @Column({ name: 'delivery_id', type: 'int', nullable: true })
+  deliveryId: number | null;
 
   /** Set when the transaction registers an invoice/bill proof instead of a delivery proof. */
-  @Column({ name: 'invoice_id', type: 'varchar', length: 36, nullable: true })
-  invoiceId: string | null;
+  @Column({ name: 'invoice_id', type: 'int', nullable: true })
+  invoiceId: number | null;
 
   @ManyToOne(() => Delivery, { eager: false, nullable: true })
   @JoinColumn({ name: 'delivery_id' })

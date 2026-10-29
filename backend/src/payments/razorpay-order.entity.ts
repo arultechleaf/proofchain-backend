@@ -11,21 +11,21 @@ export type RazorpayOrderStatus = 'created' | 'paid';
 @Index(['orderId'], { unique: true })
 @Index(['invoiceId'])
 export class RazorpayOrder {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
   /** Razorpay's order id, e.g. order_Abc123. */
   @Column({ name: 'order_id', length: 64 })
   orderId: string;
 
-  @Column({ name: 'company_id', length: 36 })
-  companyId: string;
+  @Column({ name: 'company_id', type: 'int' })
+  companyId: number;
 
-  @Column({ name: 'invoice_id', length: 36 })
-  invoiceId: string;
+  @Column({ name: 'invoice_id', type: 'int' })
+  invoiceId: number;
 
-  @Column({ name: 'party_id', length: 36 })
-  partyId: string;
+  @Column({ name: 'party_id', type: 'int' })
+  partyId: number;
 
   /** Amount in rupees (Razorpay itself works in paise). */
   @Column({ type: 'double' })
@@ -41,11 +41,11 @@ export class RazorpayOrder {
   razorpayPaymentId: string | null;
 
   /** The Payment row recorded once the order was paid. */
-  @Column({ name: 'payment_record_id', type: 'varchar', length: 36, nullable: true })
-  paymentRecordId: string | null;
+  @Column({ name: 'payment_record_id', type: 'int', nullable: true })
+  paymentRecordId: number | null;
 
-  @Column({ name: 'created_by', type: 'varchar', length: 36, nullable: true })
-  createdBy: string | null;
+  @Column({ name: 'created_by', type: 'int', nullable: true })
+  createdBy: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

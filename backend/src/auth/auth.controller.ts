@@ -10,7 +10,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { UserProfileFields } from '../users/user-profile.dto';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
@@ -23,9 +24,10 @@ export class LoginDto {
   password: string;
 }
 
-export class RegisterDto {
-  @IsString() @MinLength(2) @MaxLength(100)
-  name: string;
+export class RegisterDto extends UserProfileFields {
+  /** Full name; optional when firstName is given. */
+  @IsOptional() @IsString() @MinLength(2) @MaxLength(100)
+  name?: string;
 
   @IsEmail()
   email: string;

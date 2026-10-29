@@ -11,13 +11,17 @@ import { User, UserRole } from '../users/user.entity';
 import { Company, CompanyType } from '../companies/company.entity';
 import { AuditService } from '../audit/audit.service';
 import { EmailOtpService } from '../email-otp/email-otp.service';
+import { RolePermissionsService } from '../role-permissions/role-permissions.service';
+import { UserProfileFields, dobProblem, profileValues } from '../users/user-profile.dto';
 
 export interface JwtPayload {
-  sub: string;
+  sub: number;
   email: string;
   role: string;
-  companyId: string | null;
+  companyId: number | null;
   name: string;
+  /** Must change password: the account may only use the change-password endpoint until it does. */
+  mcp?: boolean;
 }
 
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
@@ -41,6 +45,7 @@ export class AuthService {
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(Company) private readonly companyRepo: Repository<Company>,
     private readonly emailOtpService: EmailOtpService,
+    private readonly rolePermissions: RolePermissionsService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<User> {
@@ -52,6 +57,10 @@ export class AuthService {
     if (!match) {
       throw new UnauthorizedException('Invalid credentials');
     }
+    // A temporary password stops working after its expiry time.
+    if (user.mustChangePassword && user.passwordExpiryAt && user.passwordExpiryAt.getTime() < Date.now()) {
+      throw new UnauthorizedException('Your temporary password has expired. Ask an administrator to issue a new one.');
+    }
     return user;
   }
 
@@ -62,13 +71,14 @@ export class AuthService {
       role: user.role,
       companyId: user.companyId ?? null,
       name: user.name,
+      mcp: user.mustChangePassword || undefined,
     };
     const accessToken = this.jwtService.sign(payload);
     const { passwordHash: _, resetTokenHash: _r, resetTokenExpires: _e, ...safeUser } = user;
     return { accessToken, user: safeUser };
   }
 
-  async getMe(userId: string): Promise<Partial<User>> {
+  async getMe(userId: number): Promise<Partial<User>> {
     const user = await this.usersService.findById(userId);
     if (!user) throw new UnauthorizedException('User not found');
     const { passwordHash: _, resetTokenHash: _r, resetTokenExpires: _e, ...safeUser } = user;
@@ -79,11 +89,19 @@ export class AuthService {
    * Self-service sign-up requires a verified email. The account remains inactive until
    * an administrator activates it, so registration never grants access on its own.
    */
-  async register(dto: { name: string; email: string; password: string; organizationCode: string }) {
+  async register(dto: { name?: string; email: string; password: string; organizationCode: string } & UserProfileFields) {
     const email = dto.email.trim().toLowerCase();
     if (await this.userRepo.findOne({ where: { email } })) {
       throw new ConflictException('An account with this email already exists');
     }
+    const profile = profileValues(dto);
+    const firstName = profile.firstName ?? (dto.name ? dto.name.trim().split(/\s+/)[0] : null);
+    const lastName = profile.lastName ?? (dto.name && dto.name.trim().includes(' ') ? dto.name.trim().split(/\s+/).slice(1).join(' ') : null);
+    if (!firstName) throw new BadRequestException('Enter your first name');
+    if (!profile.mobile) throw new BadRequestException('Enter your mobile number');
+    const dobError = dobProblem(profile.dateOfBirth);
+    if (dobError) throw new BadRequestException(dobError);
+    await this.usersService.assertMobilesFree(profile.mobile, profile.alternateMobile);
     const company = await this.companyRepo.findOne({
       where: { organizationCode: dto.organizationCode.trim().toUpperCase(), isActive: true },
     });
@@ -92,10 +110,14 @@ export class AuthService {
 
     const user = await this.userRepo.save(
       this.userRepo.create({
-        name: dto.name.trim(),
+        ...(profile as Partial<User>),
+        name: [firstName, lastName].filter(Boolean).join(' '),
+        firstName,
+        lastName,
         email,
+        userCode: await this.usersService.nextUserCode(),
         passwordHash: await bcrypt.hash(dto.password, BCRYPT_ROUNDS),
-        role: ROLE_FOR_COMPANY_TYPE[company.organizationType],
+        roleId: (await this.rolePermissions.roleIdOf(ROLE_FOR_COMPANY_TYPE[company.organizationType]))!,
         companyId: company.id,
         isActive: false,
       }),
@@ -138,6 +160,8 @@ export class AuthService {
     }
     await this.userRepo.update(user.id, {
       passwordHash: await bcrypt.hash(newPassword, BCRYPT_ROUNDS),
+      mustChangePassword: false,
+      passwordExpiryAt: null,
       resetTokenHash: null,
       resetTokenExpires: null,
     });
@@ -147,20 +171,30 @@ export class AuthService {
     return { message: 'Password updated. You can now sign in.' };
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+  async changePassword(userId: number, currentPassword: string, newPassword: string) {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new UnauthorizedException('User not found');
     if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
       throw new BadRequestException('Current password is incorrect');
     }
-    await this.userRepo.update(userId, { passwordHash: await bcrypt.hash(newPassword, BCRYPT_ROUNDS) });
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+      throw new BadRequestException('Choose a new password that is different from the current one');
+    }
+    // Only the password and its temporary-password flags change (updated_at is refreshed automatically).
+    await this.userRepo.update(userId, {
+      passwordHash: await bcrypt.hash(newPassword, BCRYPT_ROUNDS),
+      mustChangePassword: false,
+      passwordExpiryAt: null,
+    });
     await this.audit.log({
       actorId: userId, action: 'PASSWORD_CHANGED', resourceType: 'user', resourceId: userId,
     });
-    return { message: 'Password changed' };
+    // A fresh token, because the old one still carries the "must change password" flag.
+    const fresh = (await this.usersService.findById(userId))!;
+    return { message: 'Password changed', ...(await this.login(fresh)) };
   }
 
-  async updateProfile(userId: string, name: string) {
+  async updateProfile(userId: number, name: string) {
     await this.userRepo.update(userId, { name: name.trim() });
     return this.getMe(userId);
   }

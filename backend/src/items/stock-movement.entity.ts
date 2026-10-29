@@ -15,14 +15,14 @@ export enum StockReason {
 @Index(['itemId'])
 @Index(['companyId'])
 export class StockMovement {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'company_id', length: 36 })
-  companyId: string;
+  @Column({ name: 'company_id', type: 'int' })
+  companyId: number;
 
-  @Column({ name: 'item_id', length: 36 })
-  itemId: string;
+  @Column({ name: 'item_id', type: 'int' })
+  itemId: number;
 
   @ManyToOne(() => Item, { eager: false })
   @JoinColumn({ name: 'item_id' })
@@ -41,8 +41,8 @@ export class StockMovement {
   @Column({ type: 'varchar', length: 100, nullable: true })
   reference: string | null;
 
-  @Column({ name: 'created_by', type: 'varchar', length: 36, nullable: true })
-  createdBy: string | null;
+  @Column({ name: 'created_by', type: 'int', nullable: true })
+  createdBy: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

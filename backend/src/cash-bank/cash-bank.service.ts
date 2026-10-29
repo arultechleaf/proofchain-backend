@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { Type } from 'class-transformer';
 import {
-  IsBoolean, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min,
+  IsBoolean, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min,
 } from 'class-validator';
 import {
   AccountType, BankAccount, BankTransaction, BankTxType, CREDIT_TYPES,
@@ -40,8 +40,8 @@ export class UpdateAccountDto {
 }
 
 export class CreateBankTransactionDto {
-  @IsUUID()
-  accountId: string;
+  @Type(() => Number) @IsInt()
+  accountId: number;
 
   @IsIn([BankTxType.DEPOSIT, BankTxType.WITHDRAWAL])
   type: BankTxType.DEPOSIT | BankTxType.WITHDRAWAL;
@@ -60,11 +60,11 @@ export class CreateBankTransactionDto {
 }
 
 export class TransferDto {
-  @IsUUID()
-  fromAccountId: string;
+  @Type(() => Number) @IsInt()
+  fromAccountId: number;
 
-  @IsUUID()
-  toAccountId: string;
+  @Type(() => Number) @IsInt()
+  toAccountId: number;
 
   @IsNumber() @Min(0.01) @Type(() => Number)
   amount: number;
@@ -77,8 +77,8 @@ export class TransferDto {
 }
 
 export class BankTransactionQueryDto {
-  @IsOptional() @IsUUID()
-  accountId?: string;
+  @IsOptional() @Type(() => Number) @IsInt()
+  accountId?: number;
 
   @IsOptional() @IsString()
   type?: string;
@@ -125,7 +125,7 @@ export class CashBankService {
     return account;
   }
 
-  async updateAccount(id: string, dto: UpdateAccountDto, user: AuthUser): Promise<BankAccount> {
+  async updateAccount(id: number, dto: UpdateAccountDto, user: AuthUser): Promise<BankAccount> {
     writeCompanyId(user);
     const account = await this.findAccount(id, user);
     if (dto.name !== undefined) account.name = dto.name.trim();
@@ -134,7 +134,7 @@ export class CashBankService {
     return this.accountRepo.save(account);
   }
 
-  async findAccount(id: string, user: AuthUser): Promise<BankAccount> {
+  async findAccount(id: number, user: AuthUser): Promise<BankAccount> {
     const account = await this.accountRepo.findOne({ where: { id } });
     if (!account) throw new NotFoundException('Account not found');
     assertAccess(account.companyId, user, 'Account');
@@ -142,14 +142,14 @@ export class CashBankService {
   }
 
   /** Net movement per account (credits minus debits), keyed by account id. */
-  private async netByAccount(companyId?: string): Promise<Map<string, number>> {
+  private async netByAccount(companyId?: number): Promise<Map<number, number>> {
     const qb = this.txRepo
       .createQueryBuilder('t')
       .select('t.accountId', 'accountId')
       .addSelect(`SUM(CASE WHEN t.type IN ('${CREDIT_TYPES.join("','")}') THEN t.amount ELSE -t.amount END)`, 'net')
       .groupBy('t.accountId');
     if (companyId) qb.where('t.companyId = :companyId', { companyId });
-    const rows = await qb.getRawMany<{ accountId: string; net: string | number | null }>();
+    const rows = await qb.getRawMany<{ accountId: number; net: string | number | null }>();
     return new Map(rows.map((r) => [r.accountId, Number(r.net ?? 0)]));
   }
 
@@ -174,7 +174,7 @@ export class CashBankService {
   // ── transactions ─────────────────────────────────────────────────────────
 
   /** Delete an account that has no transactions. */
-  async removeAccount(id: string, user: AuthUser): Promise<void> {
+  async removeAccount(id: number, user: AuthUser): Promise<void> {
     writeCompanyId(user);
     const account = await this.findAccount(id, user);
     const used = await this.txRepo.count({ where: { accountId: id } });
@@ -187,7 +187,7 @@ export class CashBankService {
    * Delete a deposit or withdrawal. A transfer is two rows, so deleting either side removes both.
    * Refused when removing it would leave an account with a negative balance.
    */
-  async removeTransaction(id: string, user: AuthUser): Promise<void> {
+  async removeTransaction(id: number, user: AuthUser): Promise<void> {
     writeCompanyId(user);
     const tx = await this.txRepo.findOne({ where: { id } });
     if (!tx) throw new NotFoundException('Transaction not found');

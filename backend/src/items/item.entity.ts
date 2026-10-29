@@ -5,11 +5,11 @@ import {
 @Entity('items')
 @Index(['companyId'])
 export class Item {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'company_id', length: 36 })
-  companyId: string;
+  @Column({ name: 'company_id', type: 'int' })
+  companyId: number;
 
   @Column({ length: 150 })
   name: string;

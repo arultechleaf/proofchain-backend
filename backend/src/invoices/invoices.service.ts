@@ -1,7 +1,9 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ArrayMinSize, IsArray, IsInt, IsNumber, IsOptional, IsString, IsUUID, Matches, MaxLength, Min, Max, ValidateNested, IsBoolean, IsIn } from 'class-validator';
+import {
+  ArrayMinSize, IsArray, IsInt, IsNumber, IsOptional, IsString, Matches, MaxLength, Min, Max, ValidateNested, IsBoolean, IsIn,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { Invoice, InvoiceStatus, InvoiceType } from './invoice.entity';
 import { InvoiceLine } from './invoice-line.entity';
@@ -24,8 +26,8 @@ import { AuthUser, assertAccess, readScope, round2, writeCompanyId } from '../co
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export class InvoiceLineDto {
-  @IsOptional() @IsUUID()
-  itemId?: string;
+  @IsOptional() @Type(() => Number) @IsInt()
+  itemId?: number;
 
   /** Defaults to the item name when an item is chosen. */
   @IsOptional() @IsString() @MaxLength(255)
@@ -63,8 +65,8 @@ export class InvoiceLineDto {
 }
 
 export class CreateInvoiceDto {
-  @IsUUID()
-  partyId: string;
+  @Type(() => Number) @IsInt()
+  partyId: number;
 
   @IsOptional() @IsString() @MaxLength(50)
   invoiceNumber?: string;
@@ -120,8 +122,8 @@ export class InvoiceQueryDto {
   @IsOptional() @IsString()
   search?: string;
 
-  @IsOptional() @IsString()
-  partyId?: string;
+  @IsOptional() @Type(() => Number) @IsInt()
+  partyId?: number;
 
   @IsOptional() @IsString()
   from?: string;
@@ -176,7 +178,7 @@ export class InvoicesService {
     if (duplicate) throw new ConflictException(`Invoice number ${invoiceNumber} already exists`);
 
     // Resolve lines against the item catalogue and work out GST line by line.
-    const items = new Map<string, Item>();
+    const items = new Map<number, Item>();
     const lines: Array<Partial<InvoiceLine>> = [];
     const calcs: LineCalc[] = [];
 
@@ -213,7 +215,7 @@ export class InvoicesService {
 
     // Selling more than is in stock is blocked. Total demand per item across all lines.
     if (type === InvoiceType.SALE) {
-      const demand = new Map<string, number>();
+      const demand = new Map<number, number>();
       for (const l of lines) if (l.itemId) demand.set(l.itemId, (demand.get(l.itemId) ?? 0) + l.quantity!);
       for (const [itemId, qty] of demand) {
         const item = items.get(itemId)!;
@@ -338,7 +340,7 @@ export class InvoicesService {
     return { data, total, page, limit };
   }
 
-  async findById(id: string, user: AuthUser): Promise<Invoice> {
+  async findById(id: number, user: AuthUser): Promise<Invoice> {
     const invoice = await this.invoiceRepo.findOne({ where: { id }, relations: { party: true, lines: true } });
     if (!invoice) throw new NotFoundException('Invoice not found');
     assertAccess(invoice.companyId, user, 'Invoice');
@@ -347,7 +349,7 @@ export class InvoicesService {
   }
 
   /** Invoice with its blockchain transaction, for the detail page. */
-  async getDetail(id: string, user: AuthUser) {
+  async getDetail(id: number, user: AuthUser) {
     const invoice = await this.findById(id, user);
     const transaction = invoice.blockchainTransactionId
       ? await this.txRepo.findOne({ where: { id: invoice.blockchainTransactionId } })
@@ -355,7 +357,7 @@ export class InvoicesService {
     return { ...invoice, transaction };
   }
 
-  async cancel(id: string, user: AuthUser): Promise<Invoice> {
+  async cancel(id: number, user: AuthUser): Promise<Invoice> {
     writeCompanyId(user);
     const invoice = await this.findById(id, user);
     if (invoice.status === InvoiceStatus.CANCELLED) throw new BadRequestException('Invoice is already cancelled');
@@ -384,7 +386,7 @@ export class InvoicesService {
   }
 
   /** Re-hash the stored invoice and compare with the registered proof. */
-  async verify(id: string, user: AuthUser) {
+  async verify(id: number, user: AuthUser) {
     const invoice = await this.findById(id, user);
     const { hexHash: calculatedHash, bytes32Hash } = this.hashOf(invoice);
     const expectedHash = invoice.payloadHash;
@@ -449,7 +451,7 @@ export class InvoicesService {
   }
 
   /** Hash the invoice and register the hash on-chain (simulated in demo mode). */
-  private async registerOnChain(invoiceId: string): Promise<void> {
+  private async registerOnChain(invoiceId: number): Promise<void> {
     const invoice = await this.invoiceRepo.findOneOrFail({ where: { id: invoiceId }, relations: { lines: true } });
     invoice.lines.sort((a, b) => a.position - b.position);
     const { hexHash, bytes32Hash, canonicalPayload } = this.hashOf(invoice);
@@ -485,7 +487,7 @@ export class InvoicesService {
    * PREFIX-YEAR-0001, counting on from the highest number already used this year (so deleting or
    * cancelling a document never makes a number repeat), and starting again at 0001 each year.
    */
-  private async nextNumber(companyId: string, type: InvoiceType): Promise<string> {
+  private async nextNumber(companyId: number, type: InvoiceType): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `${NUMBER_PREFIX[type]}-${year}-`;
     const rows = await this.invoiceRepo

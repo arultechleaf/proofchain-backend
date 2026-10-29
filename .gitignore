@@ -6,3 +6,6 @@
 **/*.sqlite
 **/*.db
 **/*.tsbuildinfo
+
+# database backups (contain password hashes)
+backend/database/backups/

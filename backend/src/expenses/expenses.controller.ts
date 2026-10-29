@@ -1,11 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards, ParseIntPipe } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateExpenseDto, ExpenseQueryDto, ExpensesService, UpdateExpenseDto } from './expenses.service';
+import { ScreenGuard } from '../auth/screen.guard';
+import { Screen } from '../auth/screen.decorator';
 
 @ApiTags('expenses')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ScreenGuard)
+@Screen('expenses', { readAlso: ['cash_bank'] })
 @Controller('expenses')
 export class ExpensesController {
   constructor(private readonly service: ExpensesService) {}
@@ -36,13 +39,13 @@ export class ExpensesController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Edit an expense' })
-  async update(@Param('id') id: string, @Body() body: UpdateExpenseDto, @Request() req) {
+  async update(@Param('id', ParseIntPipe) id: number, @Body() body: UpdateExpenseDto, @Request() req) {
     return { data: await this.service.update(id, body, req.user) };
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete an expense' })
-  async remove(@Param('id') id: string, @Request() req) {
+  async remove(@Param('id', ParseIntPipe) id: number, @Request() req) {
     await this.service.remove(id, req.user);
     return { data: { deleted: 1 } };
   }

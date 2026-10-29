@@ -6,6 +6,8 @@ import type { Request } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateRazorpayOrderDto, RazorpayService, VerifyRazorpayPaymentDto } from './razorpay.service';
+import { ScreenGuard } from '../auth/screen.guard';
+import { Screen } from '../auth/screen.decorator';
 
 @ApiTags('payments')
 @Controller('payments/razorpay')
@@ -14,7 +16,8 @@ export class RazorpayController {
 
   @Get('config')
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ScreenGuard)
+  @Screen('payments', { writeAlso: ['sales', 'purchases'] })
   @ApiOperation({ summary: 'Whether online payments are set up, and the public key id for Checkout' })
   config() {
     return { data: this.razorpay.getConfig() };
@@ -22,7 +25,8 @@ export class RazorpayController {
 
   @Post('order')
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ScreenGuard)
+  @Screen('payments', { writeAlso: ['sales', 'purchases'] })
   @ApiOperation({ summary: 'Create a Razorpay order for a sales invoice' })
   async createOrder(@Body() body: CreateRazorpayOrderDto, @Req() req) {
     return { data: await this.razorpay.createOrder(body, req.user) };
@@ -31,7 +35,8 @@ export class RazorpayController {
   @Post('verify')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ScreenGuard)
+  @Screen('payments', { writeAlso: ['sales', 'purchases'] })
   @ApiOperation({ summary: 'Verify the Checkout result and record the payment' })
   async verify(@Body() body: VerifyRazorpayPaymentDto, @Req() req) {
     return { data: await this.razorpay.verifyPayment(body, req.user) };

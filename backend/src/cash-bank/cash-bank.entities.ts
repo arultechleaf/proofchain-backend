@@ -19,11 +19,11 @@ export const CREDIT_TYPES = [BankTxType.DEPOSIT, BankTxType.TRANSFER_IN];
 @Entity('bank_accounts')
 @Index(['companyId'])
 export class BankAccount {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'company_id', length: 36 })
-  companyId: string;
+  @Column({ name: 'company_id', type: 'int' })
+  companyId: number;
 
   @Column({ length: 100 })
   name: string;
@@ -49,14 +49,14 @@ export class BankAccount {
 @Index(['companyId', 'transactionDate'])
 @Index(['accountId'])
 export class BankTransaction {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'company_id', length: 36 })
-  companyId: string;
+  @Column({ name: 'company_id', type: 'int' })
+  companyId: number;
 
-  @Column({ name: 'account_id', length: 36 })
-  accountId: string;
+  @Column({ name: 'account_id', type: 'int' })
+  accountId: number;
 
   @Column({ type: 'varchar', length: 20 })
   type: BankTxType;
@@ -74,15 +74,15 @@ export class BankTransaction {
   reference: string | null;
 
   /** For transfers: the account on the other side. */
-  @Column({ name: 'counter_account_id', type: 'varchar', length: 36, nullable: true })
-  counterAccountId: string | null;
+  @Column({ name: 'counter_account_id', type: 'int', nullable: true })
+  counterAccountId: number | null;
 
   /** Groups the two rows of one transfer. */
   @Column({ name: 'transfer_id', type: 'varchar', length: 36, nullable: true })
   transferId: string | null;
 
-  @Column({ name: 'created_by', type: 'varchar', length: 36, nullable: true })
-  createdBy: string | null;
+  @Column({ name: 'created_by', type: 'int', nullable: true })
+  createdBy: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

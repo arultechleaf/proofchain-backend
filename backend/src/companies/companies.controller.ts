@@ -1,15 +1,15 @@
-import { Body, Controller, Get, Param, Patch, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Request, UseGuards, ParseIntPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import {
   CompaniesService, CreateCompanyDto, UpdateCompanyDto,
 } from './companies.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
+import { ScreenGuard } from '../auth/screen.guard';
+import { Screen } from '../auth/screen.decorator';
 
 @ApiTags('companies')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, ScreenGuard)
 @Controller('companies')
 export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
@@ -22,23 +22,23 @@ export class CompaniesController {
   }
 
   @Get(':id')
-  @Roles('admin', 'auditor')
+  @Screen('organizations')
   @ApiOperation({ summary: 'Organization with its users' })
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id', ParseIntPipe) id: number) {
     return { data: await this.companiesService.getDetail(id) };
   }
 
   @Post()
-  @Roles('admin')
+  @Screen('organizations')
   @ApiOperation({ summary: 'Create an organization (admin only)' })
   async create(@Body() body: CreateCompanyDto, @Request() req) {
     return { data: await this.companiesService.create(body, req.user.id) };
   }
 
   @Patch(':id')
-  @Roles('admin')
+  @Screen('organizations')
   @ApiOperation({ summary: 'Update an organization (admin only)' })
-  async update(@Param('id') id: string, @Body() body: UpdateCompanyDto, @Request() req) {
+  async update(@Param('id', ParseIntPipe) id: number, @Body() body: UpdateCompanyDto, @Request() req) {
     return { data: await this.companiesService.update(id, body, req.user.id) };
   }
 }

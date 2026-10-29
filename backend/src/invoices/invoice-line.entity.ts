@@ -4,11 +4,11 @@ import { Invoice } from './invoice.entity';
 @Entity('invoice_lines')
 @Index(['invoiceId'])
 export class InvoiceLine {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'invoice_id', length: 36 })
-  invoiceId: string;
+  @Column({ name: 'invoice_id', type: 'int' })
+  invoiceId: number;
 
   @ManyToOne(() => Invoice, (i) => i.lines, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'invoice_id' })
@@ -48,8 +48,8 @@ export class InvoiceLine {
   @Column({ name: 'line_total', type: 'double', nullable: true })
   lineTotal: number | null;
 
-  @Column({ name: 'item_id', type: 'varchar', length: 36, nullable: true })
-  itemId: string | null;
+  @Column({ name: 'item_id', type: 'int', nullable: true })
+  itemId: number | null;
 
   @Column({ length: 255 })
   description: string;

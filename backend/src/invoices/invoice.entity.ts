@@ -21,11 +21,11 @@ export enum InvoiceStatus {
 @Index(['companyId', 'type'])
 @Index(['companyId', 'type', 'invoiceNumber'], { unique: true })
 export class Invoice {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'company_id', length: 36 })
-  companyId: string;
+  @Column({ name: 'company_id', type: 'int' })
+  companyId: number;
 
   @Column({ type: 'varchar', length: 20 })
   type: InvoiceType;
@@ -33,8 +33,8 @@ export class Invoice {
   @Column({ name: 'invoice_number', length: 50 })
   invoiceNumber: string;
 
-  @Column({ name: 'party_id', length: 36 })
-  partyId: string;
+  @Column({ name: 'party_id', type: 'int' })
+  partyId: number;
 
   @ManyToOne(() => Party, { eager: false })
   @JoinColumn({ name: 'party_id' })
@@ -80,8 +80,8 @@ export class Invoice {
   @Column({ name: 'blockchain_status', type: 'varchar', length: 30, default: 'not_submitted' })
   blockchainStatus: string;
 
-  @Column({ name: 'blockchain_transaction_id', type: 'varchar', length: 36, nullable: true })
-  blockchainTransactionId: string | null;
+  @Column({ name: 'blockchain_transaction_id', type: 'int', nullable: true })
+  blockchainTransactionId: number | null;
 
   /** How the customer pays: cash, upi, bank or credit (pay later). */
   @Column({ name: 'payment_type', type: 'varchar', length: 10, nullable: true })
@@ -117,8 +117,8 @@ export class Invoice {
   @Column({ name: 'round_off', type: 'double', default: 0 })
   roundOff: number;
 
-  @Column({ name: 'created_by', type: 'varchar', length: 36, nullable: true })
-  createdBy: string | null;
+  @Column({ name: 'created_by', type: 'int', nullable: true })
+  createdBy: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

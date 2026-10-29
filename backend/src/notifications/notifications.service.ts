@@ -37,12 +37,12 @@ export class NotificationsService {
    * Notify every active user of a company, plus all admins. Never throws: a failed notification
    * must not break the delivery, invoice or payment that triggered it.
    */
-  async notifyCompany(companyId: string | null | undefined, input: NotifyInput, excludeUserId?: string): Promise<void> {
+  async notifyCompany(companyId: number | null | undefined, input: NotifyInput, excludeUserId?: number): Promise<void> {
     try {
       const recipients = await this.userRepo.find({
         where: [
           ...(companyId ? [{ companyId, isActive: true }] : []),
-          { role: UserRole.ADMIN, isActive: true },
+          { roleRef: { key: UserRole.ADMIN }, isActive: true },
         ],
         select: { id: true },
       });
@@ -56,7 +56,7 @@ export class NotificationsService {
     }
   }
 
-  async findAll(query: NotificationQueryDto, userId: string) {
+  async findAll(query: NotificationQueryDto, userId: number) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const qb = this.repo
@@ -70,28 +70,28 @@ export class NotificationsService {
     return { data, total, page, limit, unread: await this.unreadCount(userId) };
   }
 
-  unreadCount(userId: string): Promise<number> {
+  unreadCount(userId: number): Promise<number> {
     return this.repo.count({ where: { userId, isRead: false } });
   }
 
-  async markRead(id: string, userId: string): Promise<Notification> {
+  async markRead(id: number, userId: number): Promise<Notification> {
     const n = await this.repo.findOne({ where: { id, userId } });
     if (!n) throw new NotFoundException('Notification not found');
     n.isRead = true;
     return this.repo.save(n);
   }
 
-  async markAllRead(userId: string): Promise<number> {
+  async markAllRead(userId: number): Promise<number> {
     const res = await this.repo.update({ userId, isRead: false }, { isRead: true });
     return res.affected ?? 0;
   }
 
-  async remove(id: string, userId: string): Promise<void> {
+  async remove(id: number, userId: number): Promise<void> {
     const res = await this.repo.delete({ id, userId });
     if (!res.affected) throw new NotFoundException('Notification not found');
   }
 
-  async removeRead(userId: string): Promise<number> {
+  async removeRead(userId: number): Promise<number> {
     const res = await this.repo.delete({ userId, isRead: true });
     return res.affected ?? 0;
   }

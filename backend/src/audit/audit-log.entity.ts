@@ -14,11 +14,11 @@ import { User } from '../users/user.entity';
 @Index(['resourceType', 'resourceId'])
 @Index(['createdAt'])
 export class AuditLog {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column({ name: 'actor_id', type: 'varchar', length: 36, nullable: true })
-  actorId: string | null;
+  @Column({ name: 'actor_id', type: 'int', nullable: true })
+  actorId: number | null;
 
   @ManyToOne(() => User, { eager: false, nullable: true })
   @JoinColumn({ name: 'actor_id' })

@@ -138,10 +138,10 @@ export class BlockchainService implements OnModuleInit {
    * The bytes32 representation is also returned for use in Solidity.
    */
   computeProofHash(payload: {
-    deliveryId: string;
+    deliveryId: number;
     deliveryReference: string;
-    senderCompanyId: string;
-    receiverCompanyId: string;
+    senderCompanyId: number;
+    receiverCompanyId: number;
     description: string;
     quantity: number;
     metadata?: Record<string, unknown> | null;
@@ -172,15 +172,15 @@ export class BlockchainService implements OnModuleInit {
    * must never change after issue are included (not payment status or paid amount).
    */
   computeInvoiceHash(payload: {
-    invoiceId: string;
+    invoiceId: number;
     type: string;
     invoiceNumber: string;
-    companyId: string;
-    partyId: string;
+    companyId: number;
+    partyId: number;
     invoiceDate: string;
     dueDate: string | null;
     lines: Array<{
-      itemId: string | null;
+      itemId: number | null;
       description: string;
       quantity: number;
       rate: number;
@@ -221,7 +221,7 @@ export class BlockchainService implements OnModuleInit {
   // ── Blockchain Proof Registration ──────────────────────────────────────────
 
   async registerProof(
-    deliveryId: string,
+    deliveryId: number,
     payloadHash: string,
     dbTx: BlockchainTransaction,
   ): Promise<BlockchainTransaction> {
@@ -234,7 +234,7 @@ export class BlockchainService implements OnModuleInit {
         ? payloadHash
         : '0x' + payloadHash;
 
-      const tx = await this.contract.registerProof(deliveryId, bytes32Hash);
+      const tx = await this.contract.registerProof(String(deliveryId), bytes32Hash);
       const receipt = await tx.wait(1);
 
       dbTx.transactionHash = tx.hash;
@@ -254,7 +254,7 @@ export class BlockchainService implements OnModuleInit {
   }
 
   async verifyProofOnChain(
-    deliveryId: string,
+    deliveryId: number,
     candidateHash: string,
   ): Promise<{ matches: boolean; entry: ProofEntry | null; error?: string }> {
     if (this.blockchainMode === 'demo' || !this.contract || !this.isConnected) {
@@ -270,7 +270,7 @@ export class BlockchainService implements OnModuleInit {
         ? candidateHash
         : '0x' + candidateHash;
       const [matches, entry] = await this.contract.verifyProof(
-        deliveryId,
+        String(deliveryId),
         bytes32Hash,
       );
       return {
