@@ -1,0 +1,4 @@
+allowBuilds:
+  '@scarf/scarf': false
+  bcrypt: false
+  better-sqlite3: false
