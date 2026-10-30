@@ -1,11 +1,10 @@
 import {
-  BadRequestException, ConflictException, Injectable, UnauthorizedException,
+  BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger, UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
 import { User, UserRole } from '../users/user.entity';
 import { Company, CompanyType } from '../companies/company.entity';
@@ -24,7 +23,8 @@ export interface JwtPayload {
   mcp?: boolean;
 }
 
-const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
+/** account_type tag that keeps password-reset OTPs apart from sign-up ones. */
+const RESET_OTP_TYPE = 'password-reset';
 const BCRYPT_ROUNDS = 10;
 
 /** Role a self-registered user gets, based on the type of the organization they join. */
@@ -34,10 +34,10 @@ const ROLE_FOR_COMPANY_TYPE: Record<CompanyType, UserRole> = {
   [CompanyType.AUDITOR]: UserRole.AUDITOR,
 };
 
-const sha256 = (value: string) => crypto.createHash('sha256').update(value).digest('hex');
-
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
@@ -131,32 +131,42 @@ export class AuthService {
   }
 
   /**
-   * Issue a one-time reset token. There is no email service yet, so outside production the
-   * token is returned in the response. The reply is identical whether or not the email exists.
+   * Step 1 of password reset: if the email belongs to an active user in the users table,
+   * email a 6-digit OTP. The reply is identical whether or not the email exists.
    */
   async forgotPassword(emailInput: string) {
-    const message = 'If that email is registered, a reset link has been generated.';
-    const user = await this.userRepo.findOne({ where: { email: emailInput.trim().toLowerCase() } });
+    const message = 'If that email is registered, a verification code has been sent.';
+    const email = emailInput.trim().toLowerCase();
+    const user = await this.userRepo.findOne({ where: { email } });
     if (!user || !user.isActive) return { message };
 
-    const token = crypto.randomBytes(32).toString('hex');
-    user.resetTokenHash = sha256(token);
-    user.resetTokenExpires = new Date(Date.now() + RESET_TOKEN_TTL_MS).toISOString();
-    await this.userRepo.update(user.id, {
-      resetTokenHash: user.resetTokenHash,
-      resetTokenExpires: user.resetTokenExpires,
-    });
+    try {
+      await this.emailOtpService.sendOtp(email, RESET_OTP_TYPE);
+    } catch (err) {
+      // A repeat request inside the resend window is not an error: the earlier code still works.
+      if (!(err instanceof HttpException && err.getStatus() === HttpStatus.TOO_MANY_REQUESTS)) {
+        this.logger.error(`Could not email password reset code to ${email}: ${(err as Error).message}`);
+      }
+    }
     await this.audit.log({
       actorId: user.id, action: 'PASSWORD_RESET_REQUESTED', resourceType: 'user', resourceId: user.id,
     });
-
-    return process.env.NODE_ENV === 'production' ? { message } : { message, resetToken: token };
+    return { message };
   }
 
-  async resetPassword(token: string, newPassword: string) {
-    const user = await this.userRepo.findOne({ where: { resetTokenHash: sha256(token) } });
-    if (!user || !user.resetTokenExpires || new Date(user.resetTokenExpires).getTime() < Date.now()) {
-      throw new BadRequestException('This reset link is invalid or has expired');
+  /** Step 2: check the OTP the user typed. */
+  async verifyResetOtp(emailInput: string, otp: string) {
+    await this.emailOtpService.verifyOtp(emailInput.trim().toLowerCase(), otp, RESET_OTP_TYPE);
+    return { message: 'Code verified. Choose a new password.' };
+  }
+
+  /** Step 3: with a verified OTP, store the new password hash in the users table. */
+  async resetPassword(emailInput: string, newPassword: string) {
+    const email = emailInput.trim().toLowerCase();
+    await this.emailOtpService.assertEmailVerified(email, RESET_OTP_TYPE);
+    const user = await this.userRepo.findOne({ where: { email } });
+    if (!user || !user.isActive) {
+      throw new BadRequestException('This account cannot be reset');
     }
     await this.userRepo.update(user.id, {
       passwordHash: await bcrypt.hash(newPassword, BCRYPT_ROUNDS),
@@ -165,6 +175,7 @@ export class AuthService {
       resetTokenHash: null,
       resetTokenExpires: null,
     });
+    await this.emailOtpService.consumeVerifiedOtp(email, RESET_OTP_TYPE);
     await this.audit.log({
       actorId: user.id, action: 'PASSWORD_RESET', resourceType: 'user', resourceId: user.id,
     });

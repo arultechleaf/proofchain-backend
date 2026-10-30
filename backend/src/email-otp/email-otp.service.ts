@@ -52,26 +52,8 @@ export class EmailOtpService {
     }
 
     const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
-    const port = Number(this.configService.get('SMTP_PORT') ?? 587);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      throw new InternalServerErrorException('SMTP_PORT is invalid');
-    }
-
-    const smtpPassword =
-      this.configService.get<string>('SMTP_PASSWORD') ??
-      this.configService.getOrThrow<string>('SMTP_PASS');
-    const smtpFrom =
-      this.configService.get<string>('SMTP_FROM') ??
-      this.configService.getOrThrow<string>('SMTP_USER');
-    const transport = createTransport({
-      host: this.configService.getOrThrow<string>('SMTP_HOST'),
-      port,
-      secure: port === 465,
-      auth: {
-        user: this.configService.getOrThrow<string>('SMTP_USER'),
-        pass: smtpPassword,
-      },
-    });
+    const { transport, from: smtpFrom } = this.smtp();
+    const isReset = accountType === 'password-reset';
 
     const otpData = {
       account_type: accountType,
@@ -92,9 +74,9 @@ export class EmailOtpService {
       await transport.sendMail({
         from: smtpFrom,
         to: email,
-        subject: 'Your IMPL email verification code',
-        text: `Your verification code is ${code}. It expires in 5 minutes. If you did not request this, ignore this email.`,
-        html: this.createOtpEmailHtml(code),
+        subject: isReset ? 'Your password reset code' : 'Your IMPL email verification code',
+        text: `Your ${isReset ? 'password reset' : 'verification'} code is ${code}. It expires in 5 minutes. If you did not request this, ignore this email.`,
+        html: this.createOtpEmailHtml(code, isReset),
       });
     } catch (error) {
       if (previousOtp) {
@@ -104,6 +86,30 @@ export class EmailOtpService {
       }
       throw error;
     }
+  }
+
+  private smtp() {
+    const port = Number(this.configService.get('SMTP_PORT') ?? 587);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new InternalServerErrorException('SMTP_PORT is invalid');
+    }
+
+    const smtpPassword =
+      this.configService.get<string>('SMTP_PASSWORD') ??
+      this.configService.getOrThrow<string>('SMTP_PASS');
+    const from =
+      this.configService.get<string>('SMTP_FROM') ??
+      this.configService.getOrThrow<string>('SMTP_USER');
+    const transport = createTransport({
+      host: this.configService.getOrThrow<string>('SMTP_HOST'),
+      port,
+      secure: port === 465,
+      auth: {
+        user: this.configService.getOrThrow<string>('SMTP_USER'),
+        pass: smtpPassword,
+      },
+    });
+    return { transport, from };
   }
 
   /**
@@ -203,7 +209,7 @@ export class EmailOtpService {
       .digest('hex');
   }
 
-  private createOtpEmailHtml(code: string): string {
+  private createOtpEmailHtml(code: string, isReset = false): string {
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -223,8 +229,8 @@ export class EmailOtpService {
 <body>
   <main class="card">
     <div class="brand">IMPL</div>
-    <h1>Email verification</h1>
-    <p class="muted">Enter this one-time code to verify your email address.</p>
+    <h1>${isReset ? 'Password reset' : 'Email verification'}</h1>
+    <p class="muted">${isReset ? 'Enter this one-time code to reset your password.' : 'Enter this one-time code to verify your email address.'}</p>
     <div class="code">${code}</div>
     <p class="muted">This code expires in 5 minutes and can only be used once.</p>
     <p class="muted">If you did not request this code, you can safely ignore this email.</p>

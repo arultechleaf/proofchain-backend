@@ -10,7 +10,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { UserProfileFields } from '../users/user-profile.dto';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -44,9 +44,17 @@ export class ForgotPasswordDto {
   email: string;
 }
 
+export class VerifyResetOtpDto {
+  @IsEmail()
+  email: string;
+
+  @Matches(/^\d{6}$/, { message: 'Enter the 6-digit code' })
+  otp: string;
+}
+
 export class ResetPasswordDto {
-  @IsString() @MinLength(20) @MaxLength(200)
-  token: string;
+  @IsEmail()
+  email: string;
 
   @IsString() @MinLength(8) @MaxLength(100)
   password: string;
@@ -86,16 +94,23 @@ export class AuthController {
 
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Request a password reset token' })
+  @ApiOperation({ summary: 'Password reset step 1: email a 6-digit code to a registered user' })
   async forgotPassword(@Body() body: ForgotPasswordDto) {
     return this.authService.forgotPassword(body.email);
   }
 
+  @Post('verify-reset-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Password reset step 2: verify the emailed code' })
+  async verifyResetOtp(@Body() body: VerifyResetOtpDto) {
+    return this.authService.verifyResetOtp(body.email, body.otp);
+  }
+
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Set a new password using a reset token' })
+  @ApiOperation({ summary: 'Password reset step 3: set the new password after the code was verified' })
   async resetPassword(@Body() body: ResetPasswordDto) {
-    return this.authService.resetPassword(body.token, body.password);
+    return this.authService.resetPassword(body.email, body.password);
   }
 
   @Post('logout')

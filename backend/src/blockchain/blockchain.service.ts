@@ -89,6 +89,12 @@ export class BlockchainService implements OnModuleInit {
     try {
       this.provider = new ethers.JsonRpcProvider(rpcUrl);
       const network = await this.provider.getNetwork();
+      const expectedChainId = Number(this.config.get('BESU_CHAIN_ID', 1337));
+      if (Number(network.chainId) !== expectedChainId) {
+        throw new Error(
+          `node reports chainId=${network.chainId} but BESU_CHAIN_ID=${expectedChainId}`,
+        );
+      }
       this.logger.log(`🔗 Connected to blockchain: chainId=${network.chainId}`);
       this.isConnected = true;
 
@@ -117,6 +123,7 @@ export class BlockchainService implements OnModuleInit {
   private loadContractAddressFromFile(): string | null {
     const candidates = [
       path.join(process.cwd(), 'src/blockchain/contract-config.json'),
+      path.join(process.cwd(), 'blockchain/deployment.json'),
       path.join(process.cwd(), '../blockchain/deployment.json'),
     ];
     for (const p of candidates) {
@@ -246,6 +253,36 @@ export class BlockchainService implements OnModuleInit {
       return await this.txRepo.save(dbTx);
     } catch (err) {
       this.logger.error(`❌ registerProof failed: ${(err as Error).message}`);
+      dbTx.status = BlockchainTxStatus.FAILED;
+      dbTx.errorMessage = (err as Error).message;
+      dbTx.retryCount += 1;
+      return await this.txRepo.save(dbTx);
+    }
+  }
+
+  /** Change the workflow status (0 Pending, 1 Approved, 2 Rejected, 3 Disputed) of an already registered proof. */
+  async updateProofStatus(
+    deliveryId: number,
+    newStatus: number,
+    dbTx: BlockchainTransaction,
+  ): Promise<BlockchainTransaction> {
+    if (this.blockchainMode === 'demo' || !this.contract || !this.isConnected) {
+      return this.simulateTransaction(dbTx, 'DEMO — not a real blockchain transaction');
+    }
+
+    try {
+      const tx = await this.contract.updateProofStatus(String(deliveryId), newStatus);
+      const receipt = await tx.wait(1);
+
+      dbTx.transactionHash = tx.hash;
+      dbTx.blockNumber = Number(receipt.blockNumber);
+      dbTx.contractAddress = this.contractAddress;
+      dbTx.status = BlockchainTxStatus.CONFIRMED;
+      dbTx.gasUsed = Number(receipt.gasUsed);
+
+      return await this.txRepo.save(dbTx);
+    } catch (err) {
+      this.logger.error(`❌ updateProofStatus failed: ${(err as Error).message}`);
       dbTx.status = BlockchainTxStatus.FAILED;
       dbTx.errorMessage = (err as Error).message;
       dbTx.retryCount += 1;

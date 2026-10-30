@@ -99,7 +99,7 @@ export class ApprovalsService {
       });
       await this.txRepo.save(dbTx);
       const statusCode = dto.decision === ApprovalDecision.APPROVED ? 1 : 2;
-      await this.blockchainService.registerProof(deliveryId, '0x' + '0'.repeat(63) + statusCode, dbTx);
+      await this.blockchainService.updateProofStatus(deliveryId, statusCode, dbTx);
     } catch {}
 
     await this.auditService.log({
