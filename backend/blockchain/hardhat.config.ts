@@ -25,12 +25,12 @@ const config: HardhatUserConfig = {
   },
   networks: {
     hardhat: {
-      chainId: 31337,
+      chainId: BESU_CHAIN_ID,
     },
     // Local Hardhat node (npx hardhat node)
     localhost: {
       url: "http://127.0.0.1:8545",
-      chainId: 31337,
+      chainId: BESU_CHAIN_ID,
     },
     // Hyperledger Besu local development network
     besu_local: {

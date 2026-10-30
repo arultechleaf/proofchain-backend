@@ -47,7 +47,7 @@ async function main() {
   // Also write into the backend config directory if it exists
   const backendConfigPath = path.join(
     __dirname,
-    "../../backend/src/blockchain/contract-config.json"
+    "../../src/blockchain/contract-config.json"
   );
   const backendConfigDir = path.dirname(backendConfigPath);
   if (fs.existsSync(backendConfigDir)) {

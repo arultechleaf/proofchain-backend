@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Header, Param, Patch, Post, Query, Request, UseGuards, Delete, ParseIntPipe } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Header, Param, Patch, Post, Query, Request, UploadedFile, UseGuards, UseInterceptors, Delete, ParseIntPipe } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { parseInvoicePdf } from './invoice-parser';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
@@ -70,6 +72,15 @@ export class ItemsController {
   @ApiOperation({ summary: 'Add, receive or correct the stock of several items at one branch' })
   async entry(@Body() body: StockEntryDto, @Request() req) {
     return { data: await this.itemsService.stockEntry(body, req.user) };
+  }
+
+  @Screen('stock_entry', { writeAlso: ['inventory'] })
+  @Post('stock/import-invoice')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  @ApiOperation({ summary: 'Read an invoice PDF and return its item lines (nothing is saved)' })
+  async importInvoice(@UploadedFile() file: { buffer: Buffer } | undefined) {
+    if (!file) throw new BadRequestException('Choose a PDF file to upload');
+    return { data: await parseInvoicePdf(file.buffer) };
   }
 
   @Screen('inventory', { readAlso: ['items', 'stock_entry', 'company_inventory'] })
