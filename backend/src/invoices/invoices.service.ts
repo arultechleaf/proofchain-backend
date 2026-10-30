@@ -5,6 +5,7 @@ import {
   ArrayMinSize, IsArray, IsInt, IsNumber, IsOptional, IsString, Matches, MaxLength, Min, Max, ValidateNested, IsBoolean, IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { CompanySettings } from '../company-self/company-self.entities';
 import { Invoice, InvoiceStatus, InvoiceType } from './invoice.entity';
 import { InvoiceLine } from './invoice-line.entity';
 import { Party } from '../parties/party.entity';
@@ -70,6 +71,10 @@ export class CreateInvoiceDto {
 
   @IsOptional() @IsString() @MaxLength(50)
   invoiceNumber?: string;
+
+  /** The branch / godown the stock moves at; the company's default branch when left out. */
+  @IsOptional() @Type(() => Number) @IsInt()
+  branchId?: number;
 
   @IsOptional() @Matches(ISO_DATE, { message: 'invoiceDate must be YYYY-MM-DD' })
   invoiceDate?: string;
@@ -163,6 +168,7 @@ export class InvoicesService {
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
     @InjectRepository(Company) private readonly companyRepo: Repository<Company>,
+    @InjectRepository(CompanySettings) private readonly settingsRepo: Repository<CompanySettings>,
     private readonly payments: PaymentsService,
   ) {}
 
@@ -213,14 +219,16 @@ export class InvoicesService {
       });
     }
 
-    // Selling more than is in stock is blocked. Total demand per item across all lines.
+    // Selling more than the branch holds is blocked. Total demand per item across all lines.
+    const branch = await this.itemsService.resolveBranch(companyId, dto.branchId);
     if (type === InvoiceType.SALE) {
       const demand = new Map<number, number>();
       for (const l of lines) if (l.itemId) demand.set(l.itemId, (demand.get(l.itemId) ?? 0) + l.quantity!);
       for (const [itemId, qty] of demand) {
         const item = items.get(itemId)!;
-        if (item.stock < qty) {
-          throw new BadRequestException(`Only ${item.stock} ${item.unit} of "${item.name}" in stock (need ${qty})`);
+        const here = await this.itemsService.branchQuantity(itemId, branch.id);
+        if (here < qty) {
+          throw new BadRequestException(`Only ${here} ${item.unit} of "${item.name}" at ${branch.name} (need ${qty})`);
         }
       }
     }
@@ -251,7 +259,7 @@ export class InvoicesService {
           paymentType, customerMobile: dto.customerMobile?.trim() || party.phone || null, customerGstin,
           billingAddress: dto.billingAddress?.trim() || party.address || null,
           placeOfSupply: dto.placeOfSupply?.trim() || (customerGstin && /^\d{2}/.test(customerGstin) ? customerGstin.slice(0, 2) : null),
-          paidAmount: 0, status: InvoiceStatus.ISSUED, notes: dto.notes ?? null, createdBy: user.id,
+          paidAmount: 0, status: InvoiceStatus.ISSUED, notes: dto.notes ?? null, createdBy: user.id, branchId: branch.id,
         }),
       );
       await manager.save(lines.map((l) => manager.create(InvoiceLine, { ...l, invoiceId: invoice.id })));
@@ -261,7 +269,7 @@ export class InvoicesService {
         const sale = type === InvoiceType.SALE;
         await this.itemsService.moveStock(
           manager, l.itemId, sale ? -l.quantity! : l.quantity!,
-          sale ? StockReason.SALE : StockReason.PURCHASE, invoiceNumber, user.id,
+          sale ? StockReason.SALE : StockReason.PURCHASE, invoiceNumber, user.id, branch.id,
         );
       }
       if (received > 0) {
@@ -371,7 +379,7 @@ export class InvoicesService {
         // Undo the original movement: sales put stock back, purchases take it out again.
         const sale = invoice.type === InvoiceType.SALE;
         await this.itemsService.moveStock(
-          manager, l.itemId, sale ? l.quantity : -l.quantity, StockReason.CANCELLED, invoice.invoiceNumber, user.id,
+          manager, l.itemId, sale ? l.quantity : -l.quantity, StockReason.CANCELLED, invoice.invoiceNumber, user.id, invoice.branchId,
         );
       }
       invoice.status = InvoiceStatus.CANCELLED;
@@ -489,7 +497,10 @@ export class InvoicesService {
    */
   private async nextNumber(companyId: number, type: InvoiceType): Promise<string> {
     const year = new Date().getFullYear();
-    const prefix = `${NUMBER_PREFIX[type]}-${year}-`;
+    // each company can choose its own prefix (My company > Bank & invoice settings); INV / BILL until it does
+    const settings = await this.settingsRepo.findOne({ where: { companyId } });
+    const chosen = type === InvoiceType.SALE ? settings?.salesPrefix : settings?.purchasePrefix;
+    const prefix = `${chosen || NUMBER_PREFIX[type]}-${year}-`;
     const rows = await this.invoiceRepo
       .createQueryBuilder('i')
       .select('i.invoiceNumber', 'invoiceNumber')

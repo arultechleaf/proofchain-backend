@@ -44,6 +44,9 @@ import { ExpensesModule } from './expenses/expenses.module';
 import { Quotation, QuotationLine } from './quotations/quotation.entities';
 import { QuotationsModule } from './quotations/quotations.module';
 import { RolePermission, Role, Screen, UserScreenPermission } from './role-permissions/role-permissions';
+import { Branch, CompanySettings } from './company-self/company-self.entities';
+import { ItemBranchStock } from './items/item-branch-stock.entity';
+import { CompanySelfModule } from './company-self/company-self.module';
 import { RolePermissionsModule } from './role-permissions/role-permissions.module';
 import { DatabaseViewsModule } from './database/views.module';
 
@@ -51,7 +54,7 @@ import { DatabaseViewsModule } from './database/views.module';
 const ENTITIES = [
   User, Company, Delivery, Approval, BlockchainTransaction, ProofRecord, AuditLog,
   Party, Item, StockMovement, Invoice, InvoiceLine, Payment, RazorpayOrder, EmailOtp, Notification,
-  BankAccount, BankTransaction, Expense, Quotation, QuotationLine, RolePermission, Role, Screen, UserScreenPermission,
+  BankAccount, BankTransaction, Expense, Quotation, QuotationLine, RolePermission, Role, Screen, UserScreenPermission, CompanySettings, Branch, ItemBranchStock,
 ];
 
 @Module({
@@ -127,6 +130,7 @@ const ENTITIES = [
     ExpensesModule,
     QuotationsModule,
     RolePermissionsModule,
+    CompanySelfModule,
     DatabaseViewsModule,
   ],
 })

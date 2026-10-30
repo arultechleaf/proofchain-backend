@@ -7,6 +7,7 @@ import { Invoice, InvoiceStatus, InvoiceType } from '../invoices/invoice.entity'
 import { Payment, PaymentDirection } from '../payments/payment.entity';
 import { ItemsService } from '../items/items.service';
 import { AuthUser, readScope, round2 } from '../common/tenant';
+import { StockSummaryQueryDto } from '../items/items.service';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -204,8 +205,8 @@ export class ReportsService {
     };
   }
 
-  stock(user: AuthUser) {
-    return this.itemsService.stockSummary(user);
+  stock(user: AuthUser, query: StockSummaryQueryDto = {}) {
+    return this.itemsService.stockSummary(user, query);
   }
 
   private daysBefore(date: string, days: number): string {

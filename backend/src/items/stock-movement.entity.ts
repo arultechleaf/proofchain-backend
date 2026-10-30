@@ -9,11 +9,16 @@ export enum StockReason {
   PURCHASE = 'purchase',
   ADJUSTMENT = 'adjustment',
   CANCELLED = 'cancelled',
+  SALE_RETURN = 'sale_return',
+  PURCHASE_RETURN = 'purchase_return',
+  TRANSFER_IN = 'transfer_in',
+  TRANSFER_OUT = 'transfer_out',
 }
 
 @Entity('stock_movements')
 @Index(['itemId'])
 @Index(['companyId'])
+@Index(['branchId'])
 export class StockMovement {
   @PrimaryGeneratedColumn()
   id: number;
@@ -23,6 +28,10 @@ export class StockMovement {
 
   @Column({ name: 'item_id', type: 'int' })
   itemId: number;
+
+  /** The branch / godown the stock moved at. */
+  @Column({ name: 'branch_id', type: 'int', nullable: true })
+  branchId: number | null;
 
   @ManyToOne(() => Item, { eager: false })
   @JoinColumn({ name: 'item_id' })

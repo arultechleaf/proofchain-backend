@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OutstandingQueryDto, ReportsService, SalesReportQueryDto, TransactionsQueryDto } from './reports.service';
 import { ScreenGuard } from '../auth/screen.guard';
 import { Screen } from '../auth/screen.decorator';
+import { StockSummaryQueryDto } from '../items/items.service';
 
 @ApiTags('reports')
 @ApiBearerAuth('access-token')
@@ -33,7 +34,7 @@ export class ReportsController {
 
   @Get('stock')
   @ApiOperation({ summary: 'Stock valuation and low-stock items' })
-  async stock(@Request() req) {
-    return { data: await this.reportsService.stock(req.user) };
+  async stock(@Query() query: StockSummaryQueryDto, @Request() req) {
+    return { data: await this.reportsService.stock(req.user, query) };
   }
 }

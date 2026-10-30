@@ -40,6 +40,33 @@ export class Company {
   @Column({ type: 'varchar', length: 15, nullable: true })
   gstin: string | null;
 
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  pan: string | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  address: string | null;
+
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  city: string | null;
+
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  state: string | null;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  pincode: string | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  phone: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  email: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  website: string | null;
+
+  @Column({ name: 'logo_url', type: 'varchar', length: 500, nullable: true })
+  logoUrl: string | null;
+
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 

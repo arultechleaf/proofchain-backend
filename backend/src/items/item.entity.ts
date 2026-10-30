@@ -40,6 +40,10 @@ export class Item {
   @Column({ name: 'low_stock_level', type: 'double', default: 0 })
   lowStockLevel: number;
 
+  /** How much to order when the item runs low. */
+  @Column({ name: 'reorder_quantity', type: 'double', default: 0 })
+  reorderQuantity: number;
+
   @Column({ type: 'varchar', length: 500, nullable: true })
   description: string | null;
 

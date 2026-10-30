@@ -117,6 +117,10 @@ export class Invoice {
   @Column({ name: 'round_off', type: 'double', default: 0 })
   roundOff: number;
 
+  /** The branch / godown the stock of this document moved at. */
+  @Column({ name: 'branch_id', type: 'int', nullable: true })
+  branchId: number | null;
+
   @Column({ name: 'created_by', type: 'int', nullable: true })
   createdBy: number | null;
 

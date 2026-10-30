@@ -13,10 +13,11 @@ import { AuditModule } from '../audit/audit.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { Company } from '../companies/company.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { CompanySettings } from '../company-self/company-self.entities';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Invoice, InvoiceLine, Party, Item, BlockchainTransaction, Company]),
+    TypeOrmModule.forFeature([Invoice, InvoiceLine, Party, Item, BlockchainTransaction, Company, CompanySettings]),
     ItemsModule,
     BlockchainModule,
     AuditModule,
