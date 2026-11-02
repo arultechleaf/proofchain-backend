@@ -85,6 +85,12 @@ export class AuthService {
     return safeUser;
   }
 
+  /** Active organizations, so the sign-up form can offer a list instead of a typed code. */
+  async organizations() {
+    const rows = await this.companyRepo.find({ where: { isActive: true }, order: { name: 'ASC' } });
+    return rows.map((c) => ({ name: c.name, organizationCode: c.organizationCode }));
+  }
+
   /**
    * Self-service sign-up requires a verified email. The account remains inactive until
    * an administrator activates it, so registration never grants access on its own.

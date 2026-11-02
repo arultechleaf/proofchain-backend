@@ -309,3 +309,30 @@ Private Key: 0xdf57089febbacf7ba0bc227dafbffa9fc08a93fdc68e1e42411a14efcf23656e
 
 [32meth_chainId[0m
 [32meth_chainId (2)[0m
+[32meth_chainId (3)[0m
+[32meth_chainId (4)[0m
+[32meth_chainId (5)[0m
+[32meth_chainId (6)[0m
+[32meth_chainId (7)[0m
+[32meth_chainId (8)[0m
+[32meth_chainId (9)[0m
+[32meth_chainId (10)[0m
+[32meth_chainId (11)[0m
+[32meth_chainId (12)[0m
+[32meth_chainId (13)[0m
+[32meth_chainId (14)[0m
+[32meth_chainId (15)[0m
+[32meth_chainId (16)[0m
+[32meth_chainId (17)[0m
+[32meth_chainId (18)[0m
+[32meth_chainId (19)[0m
+[32meth_chainId (20)[0m
+[32meth_getTransactionCount[0m
+[31meth_estimateGas[0m
+  Contract call:       DeliveryProofRegistry#registerProof
+  From:                0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
+  To:                  0x5fbdb2315678afecb367f032d93f642f64180aa3
+  Value:               0 ETH
+
+  Error: VM Exception while processing transaction: reverted with an unrecognized custom error (return data: 0x0a7a3d7c000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000013800000000000000000000000000000000000000000000000000000000000000)
+

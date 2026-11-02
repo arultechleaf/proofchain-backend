@@ -86,6 +86,12 @@ export class AuthController {
     return this.authService.login(user);
   }
 
+  @Get('organizations')
+  @ApiOperation({ summary: 'Organizations a new user can request to join (for the sign-up form)' })
+  async organizations() {
+    return this.authService.organizations();
+  }
+
   @Post('register')
   @ApiOperation({ summary: 'Request an account (inactive until an administrator approves it)' })
   async register(@Body() body: RegisterDto) {
