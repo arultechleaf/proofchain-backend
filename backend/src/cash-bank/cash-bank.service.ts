@@ -192,6 +192,9 @@ export class CashBankService {
     const tx = await this.txRepo.findOne({ where: { id } });
     if (!tx) throw new NotFoundException('Transaction not found');
     assertAccess(tx.companyId, user, 'Transaction');
+    if (tx.paymentId) {
+      throw new BadRequestException('This movement is linked to a payment. Delete it from the Payments screen instead.');
+    }
     const rows = tx.transferId ? await this.txRepo.find({ where: { transferId: tx.transferId } }) : [tx];
 
     const nets = await this.netByAccount(tx.companyId);

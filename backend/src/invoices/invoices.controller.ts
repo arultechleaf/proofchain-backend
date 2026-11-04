@@ -20,6 +20,13 @@ export class InvoicesController {
     return { data: await this.invoicesService.create(InvoiceType.SALE, body, req.user) };
   }
 
+  @Screen('non_gst_sales_create')
+  @Post('non-gst-sales')
+  @ApiOperation({ summary: 'Create a Non-GST sale (no tax, own number series) and register its proof hash' })
+  async createNonGstSale(@Body() body: CreateInvoiceDto, @Request() req) {
+    return { data: await this.invoicesService.create(InvoiceType.SALE, body, req.user, { gst: false }) };
+  }
+
   @Screen('purchases_create')
   @Post('purchases')
   @ApiOperation({ summary: 'Create a purchase bill and register its proof hash' })
@@ -31,7 +38,14 @@ export class InvoicesController {
   @Get('sales')
   @ApiOperation({ summary: 'List sales invoices' })
   async listSales(@Query() query: InvoiceQueryDto, @Request() req) {
-    return this.invoicesService.findAll({ ...query, type: InvoiceType.SALE }, req.user);
+    return this.invoicesService.findAll({ ...query, type: InvoiceType.SALE, gst: 'true' }, req.user);
+  }
+
+  @Screen('non_gst_sales', { readAlso: ['billing', 'dashboard', 'accounts', 'reports'] })
+  @Get('non-gst-sales')
+  @ApiOperation({ summary: 'List Non-GST sales' })
+  async listNonGstSales(@Query() query: InvoiceQueryDto, @Request() req) {
+    return this.invoicesService.findAll({ ...query, type: InvoiceType.SALE, gst: 'false' }, req.user);
   }
 
   @Screen('purchases', { readAlso: ['billing', 'dashboard', 'accounts', 'reports'] })
@@ -41,38 +55,38 @@ export class InvoicesController {
     return this.invoicesService.findAll({ ...query, type: InvoiceType.PURCHASE }, req.user);
   }
 
-  @Screen('payments', { readAlso: ['sales', 'purchases', 'parties', 'billing', 'accounts', 'reports', 'dashboard'] })
+  @Screen('payments', { readAlso: ['sales', 'non_gst_sales', 'purchases', 'parties', 'billing', 'accounts', 'reports', 'dashboard'] })
   @Get('invoices')
   @ApiOperation({ summary: 'List sales and purchases together' })
   async list(@Query() query: InvoiceQueryDto, @Request() req) {
     return this.invoicesService.findAll(query, req.user);
   }
 
-  @Screen('sales_create', { readAlso: ['purchases_create'] })
+  @Screen('sales_create', { readAlso: ['purchases_create', 'non_gst_sales_create'] })
   @Get('invoices/next-number')
   @ApiOperation({ summary: 'The invoice or bill number the next document will get' })
-  async nextNumber(@Query('type') type: string, @Request() req) {
+  async nextNumber(@Query('type') type: string, @Query('gst') gst: string | undefined, @Request() req) {
     if (type !== InvoiceType.SALE && type !== InvoiceType.PURCHASE) {
       throw new BadRequestException('type must be "sale" or "purchase"');
     }
-    return { data: await this.invoicesService.previewNextNumber(type, req.user) };
+    return { data: await this.invoicesService.previewNextNumber(type, req.user, gst !== 'false') };
   }
 
-  @Screen('sales', { readAlso: ['purchases', 'payments', 'parties', 'billing', 'accounts'] })
+  @Screen('sales', { readAlso: ['purchases', 'non_gst_sales', 'payments', 'parties', 'billing', 'accounts'] })
   @Get('invoices/:id')
   @ApiOperation({ summary: 'Invoice with lines and blockchain transaction' })
   async findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {
     return { data: await this.invoicesService.getDetail(id, req.user) };
   }
 
-  @Screen('verification', { writeAlso: ['sales', 'purchases'] })
+  @Screen('verification', { writeAlso: ['sales', 'purchases', 'non_gst_sales'] })
   @Post('invoices/:id/verify')
   @ApiOperation({ summary: 'Re-hash the invoice and compare with its blockchain proof' })
   async verify(@Param('id', ParseIntPipe) id: number, @Request() req) {
     return { data: await this.invoicesService.verify(id, req.user) };
   }
 
-  @Screen('sales', { writeAlso: ['purchases'] })
+  @Screen('sales', { writeAlso: ['purchases', 'non_gst_sales'] })
   @Patch('invoices/:id/cancel')
   @ApiOperation({ summary: 'Cancel an unpaid invoice and restore stock' })
   async cancel(@Param('id', ParseIntPipe) id: number, @Request() req) {

@@ -19,6 +19,12 @@ export class PaymentsController {
     return { data: await this.paymentsService.create(body, req.user) };
   }
 
+  @Get('accounts')
+  @ApiOperation({ summary: 'Active cash/bank accounts that payments can go into' })
+  async accounts(@Query('type') type: string | undefined, @Request() req) {
+    return { data: await this.paymentsService.accounts(req.user, type === 'cash' || type === 'bank' ? type : undefined) };
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a payment and reverse it on the invoice' })
   async remove(@Param('id', ParseIntPipe) id: number, @Request() req) {

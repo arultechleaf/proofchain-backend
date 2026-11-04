@@ -12,6 +12,7 @@ import { RazorpayOrder } from './razorpay-order.entity';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuthUser, readScope, round2, writeCompanyId } from '../common/tenant';
+import { AccountType, BankAccount, BankTransaction, BankTxType, CREDIT_TYPES } from '../cash-bank/cash-bank.entities';
 
 export const PAYMENT_METHODS = ['cash', 'bank', 'upi', 'card', 'cheque', 'razorpay', 'other'];
 
@@ -31,6 +32,10 @@ export class CreatePaymentDto {
 
   @IsOptional() @IsString() @MaxLength(20)
   method?: string;
+
+  /** The cash/bank account this money goes into (received) or comes out of (paid). */
+  @IsOptional() @Type(() => Number) @IsInt()
+  accountId?: number;
 
   @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'paymentDate must be YYYY-MM-DD' })
   paymentDate?: string;
@@ -81,6 +86,7 @@ export class PaymentsService {
       if (await m.count(RazorpayOrder, { where: { paymentRecordId: id } })) {
         throw new BadRequestException('Online (Razorpay) payments cannot be deleted because the money was really collected');
       }
+      await m.delete(BankTransaction, { paymentId: id }); // the cash/bank movement this payment made goes with it
       if (payment.invoiceId) {
         const invoice = await m.findOne(Invoice, { where: { id: payment.invoiceId } });
         if (invoice && invoice.status !== InvoiceStatus.CANCELLED) {
@@ -95,6 +101,16 @@ export class PaymentsService {
     await this.audit.log({
       actorId: user.id, action: 'PAYMENT_DELETED', resourceType: 'payment', resourceId: id,
       details: { amount: removed.amount, direction: removed.direction, invoiceId: removed.invoiceId },
+    });
+  }
+
+  /** The company's active cash or bank accounts, for the "which account" choice on payment forms. */
+  async accounts(user: AuthUser, type?: 'cash' | 'bank') {
+    const companyId = writeCompanyId(user);
+    return this.paymentRepo.manager.find(BankAccount, {
+      where: { companyId, isActive: true, ...(type ? { accountType: type as AccountType } : {}) },
+      order: { name: 'ASC' },
+      select: { id: true, name: true, accountType: true },
     });
   }
 
@@ -116,6 +132,13 @@ export class PaymentsService {
     if (!PAYMENT_METHODS.includes(method)) {
       throw new BadRequestException(`method must be one of: ${PAYMENT_METHODS.join(', ')}`);
     }
+    const accountRequired = method === 'cash' || method === 'bank';
+    if (accountRequired && !dto.accountId) {
+      throw new BadRequestException(`Select a ${method} account for this payment`);
+    }
+    if (dto.accountId && method !== 'cash' && method !== 'bank' && method !== 'razorpay') {
+      throw new BadRequestException('A cash/bank account can only be selected for cash, bank, or Razorpay payments');
+    }
 
     const party = await (outer ?? this.paymentRepo.manager).findOne(Party, { where: { id: dto.partyId } });
     if (!party || party.companyId !== companyId) throw new BadRequestException('Party not found');
@@ -126,6 +149,28 @@ export class PaymentsService {
       outer ? fn(outer) : this.paymentRepo.manager.transaction(fn);
 
     const payment = await run(async (manager) => {
+      let account: BankAccount | null = null;
+      if (dto.accountId) {
+        account = await manager.findOne(BankAccount, { where: { id: dto.accountId, companyId, isActive: true } });
+        if (!account) throw new BadRequestException('Cash/bank account not found or inactive');
+        const expectedType = method === 'cash' ? AccountType.CASH : AccountType.BANK;
+        if (account.accountType !== expectedType) {
+          throw new BadRequestException(`Select a ${expectedType} account for this payment`);
+        }
+        if (dto.direction === PaymentDirection.OUT) {
+          const net = await manager.getRepository(BankTransaction)
+            .createQueryBuilder('t')
+            .select(
+              `COALESCE(SUM(CASE WHEN t.type IN ('${CREDIT_TYPES.join("','")}') THEN t.amount ELSE -t.amount END), 0)`,
+              'net',
+            )
+            .where('t.accountId = :accountId', { accountId: account.id })
+            .getRawOne<{ net: string | number }>();
+          const balance = round2(account.openingBalance + Number(net?.net ?? 0));
+          if (amount > balance) throw new BadRequestException(`Insufficient balance in "${account.name}" (available ${balance})`);
+        }
+      }
+
       if (dto.invoiceId) {
         const invoice = await manager.findOne(Invoice, { where: { id: dto.invoiceId } });
         if (!invoice || invoice.companyId !== companyId || invoice.partyId !== party.id) {
@@ -150,7 +195,7 @@ export class PaymentsService {
         await manager.save(invoice);
       }
 
-      return manager.save(
+      const saved = await manager.save(
         manager.create(Payment, {
           companyId,
           partyId: party.id,
@@ -164,6 +209,22 @@ export class PaymentsService {
           createdBy: actorId,
         }),
       );
+      if (account) {
+        await manager.save(
+          manager.create(BankTransaction, {
+            companyId,
+            accountId: account.id,
+            paymentId: saved.id,
+            type: dto.direction === PaymentDirection.IN ? BankTxType.DEPOSIT : BankTxType.WITHDRAWAL,
+            amount,
+            transactionDate: saved.paymentDate,
+            description: `${dto.direction === PaymentDirection.IN ? 'Received from' : 'Paid to'} ${party.name}`,
+            reference: dto.reference ?? null,
+            createdBy: actorId,
+          }),
+        );
+      }
+      return saved;
     });
 
     await this.audit.log({
@@ -197,7 +258,21 @@ export class PaymentsService {
     if (query.to) qb.andWhere('p.paymentDate <= :to', { to: query.to });
     qb.skip((page - 1) * limit).take(limit);
 
-    const [data, total] = await qb.getManyAndCount();
+    const [rows, total] = await qb.getManyAndCount();
+
+    // which cash/bank account each payment went into (the movement it made is linked by payment id)
+    const ids = rows.map((p) => p.id);
+    const links = ids.length
+      ? await this.paymentRepo.manager
+          .createQueryBuilder(BankTransaction, 't')
+          .innerJoin(BankAccount, 'a', 'a.id = t.accountId')
+          .select('t.paymentId', 'paymentId')
+          .addSelect('a.name', 'name')
+          .where('t.paymentId IN (:...ids)', { ids })
+          .getRawMany<{ paymentId: number; name: string }>()
+      : [];
+    const accountOf = new Map(links.map((l) => [Number(l.paymentId), l.name]));
+    const data = rows.map((p) => Object.assign(p, { accountName: accountOf.get(p.id) ?? null }));
 
     const totalsQb = this.paymentRepo
       .createQueryBuilder('p')

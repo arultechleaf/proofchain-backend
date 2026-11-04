@@ -101,6 +101,10 @@ export class Invoice {
   @Column({ name: 'place_of_supply', type: 'varchar', length: 2, nullable: true })
   placeOfSupply: string | null;
 
+  /** false for a Non-GST sale: no GSTIN, HSN or tax, numbered and listed separately from GST invoices. */
+  @Column({ name: 'is_gst', type: 'boolean', default: true })
+  isGst: boolean;
+
   /** Subtotal minus line discounts; null on invoices made before GST support. */
   @Column({ name: 'taxable_value', type: 'double', nullable: true })
   taxableValue: number | null;

@@ -5,7 +5,7 @@ import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CreateRazorpayOrderDto, RazorpayService, VerifyRazorpayPaymentDto } from './razorpay.service';
+import { CreateDraftRazorpayOrderDto, CreateRazorpayOrderDto, RazorpayService, VerifyRazorpayPaymentDto } from './razorpay.service';
 import { ScreenGuard } from '../auth/screen.guard';
 import { Screen } from '../auth/screen.decorator';
 
@@ -30,6 +30,15 @@ export class RazorpayController {
   @ApiOperation({ summary: 'Create a Razorpay order for a sales invoice' })
   async createOrder(@Body() body: CreateRazorpayOrderDto, @Req() req) {
     return { data: await this.razorpay.createOrder(body, req.user) };
+  }
+
+  @Post('draft-order')
+  @ApiBearerAuth('access-token')
+  @UseGuards(JwtAuthGuard, ScreenGuard)
+  @Screen('payments', { writeAlso: ['sales', 'sales_create', 'non_gst_sales', 'non_gst_sales_create'] })
+  @ApiOperation({ summary: 'Create a Razorpay order for a sale that is saved after it is paid' })
+  async createDraftOrder(@Body() body: CreateDraftRazorpayOrderDto, @Req() req) {
+    return { data: await this.razorpay.createDraftOrder(body, req.user) };
   }
 
   @Post('verify')

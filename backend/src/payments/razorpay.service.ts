@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import {
   IsNumber, IsOptional, IsString, Min, MaxLength, IsInt,
 } from 'class-validator';
@@ -20,14 +20,33 @@ import { PaymentDirection } from './payment.entity';
 import { Invoice, InvoiceStatus, InvoiceType } from '../invoices/invoice.entity';
 import { AuditService } from '../audit/audit.service';
 import { AuthUser, assertAccess, round2, writeCompanyId } from '../common/tenant';
+import { AccountType, BankAccount } from '../cash-bank/cash-bank.entities';
+import { Party } from '../parties/party.entity';
+import { Company } from '../companies/company.entity';
 
 export class CreateRazorpayOrderDto {
   @Type(() => Number) @IsInt()
   invoiceId: number;
 
+  /** The bank account credited when the payment is confirmed. */
+  @Type(() => Number) @IsInt()
+  accountId: number;
+
   /** Rupees. Defaults to the full balance due; may be less for a part payment. */
   @IsOptional() @IsNumber() @Min(1) @Type(() => Number)
   amount?: number;
+}
+
+/** Pay first, invoice after: the order is made before any invoice exists. */
+export class CreateDraftRazorpayOrderDto {
+  @Type(() => Number) @IsInt()
+  partyId: number;
+
+  @Type(() => Number) @IsInt()
+  accountId: number;
+
+  @IsNumber() @Min(1) @Type(() => Number)
+  amount: number;
 }
 
 export class VerifyRazorpayPaymentDto {
@@ -69,6 +88,9 @@ export class RazorpayService {
     private readonly audit: AuditService,
     @InjectRepository(RazorpayOrder) private readonly orderRepo: Repository<RazorpayOrder>,
     @InjectRepository(Invoice) private readonly invoiceRepo: Repository<Invoice>,
+    @InjectRepository(BankAccount) private readonly accountRepo: Repository<BankAccount>,
+    @InjectRepository(Party) private readonly partyRepo: Repository<Party>,
+    @InjectRepository(Company) private readonly companyRepo: Repository<Company>,
   ) {}
 
   // ── configuration ────────────────────────────────────────────────────────
@@ -103,11 +125,21 @@ export class RazorpayService {
     }
   }
 
+  /** The seller's name, shown at the top of the Razorpay window. */
+  private async merchantName(companyId: number): Promise<string> {
+    const company = await this.companyRepo.findOne({ where: { id: companyId } });
+    return company?.name?.trim() || 'ProofChain';
+  }
+
   // ── step 1: create an order ──────────────────────────────────────────────
 
   async createOrder(dto: CreateRazorpayOrderDto, user: AuthUser) {
     this.requireEnabled();
     const companyId = writeCompanyId(user);
+    const account = await this.accountRepo.findOne({
+      where: { id: dto.accountId, companyId, accountType: AccountType.BANK, isActive: true },
+    });
+    if (!account) throw new BadRequestException('Select an active bank account for this Razorpay payment');
 
     const invoice = await this.invoiceRepo.findOne({ where: { id: dto.invoiceId }, relations: { party: true } });
     if (!invoice || invoice.companyId !== companyId) throw new NotFoundException('Invoice not found');
@@ -135,6 +167,7 @@ export class RazorpayService {
         companyId,
         invoiceId: invoice.id,
         partyId: invoice.partyId,
+        bankAccountId: account.id,
         amount,
         currency: CURRENCY,
         createdBy: user.id,
@@ -151,12 +184,80 @@ export class RazorpayService {
       currency: order.currency,
       keyId: this.keyId,
       invoiceNumber: invoice.invoiceNumber,
+      merchantName: await this.merchantName(companyId),
       customer: {
         name: invoice.party?.name ?? '',
         email: invoice.party?.email ?? '',
         contact: invoice.party?.phone ?? '',
       },
     };
+  }
+
+  /**
+   * Pay first: an order for a sale that is not saved yet. The browser opens Checkout with it and, once
+   * paid, saves the invoice with the result (see claimDraftPayment). Nothing is recorded until then.
+   */
+  async createDraftOrder(dto: CreateDraftRazorpayOrderDto, user: AuthUser) {
+    this.requireEnabled();
+    const companyId = writeCompanyId(user);
+    const account = await this.accountRepo.findOne({
+      where: { id: dto.accountId, companyId, accountType: AccountType.BANK, isActive: true },
+    });
+    if (!account) throw new BadRequestException('Select an active bank account for this Razorpay payment');
+    const party = await this.partyRepo.findOne({ where: { id: dto.partyId } });
+    if (!party || party.companyId !== companyId) throw new BadRequestException('Party not found');
+
+    const amount = round2(dto.amount);
+    const order = await this.api<{ id: string; amount: number; currency: string }>('POST', '/orders', {
+      amount: Math.round(amount * 100),
+      currency: CURRENCY,
+      receipt: `NEW-${Date.now()}`,
+      notes: { draft: 'true', partyId: party.id },
+    });
+    await this.orderRepo.save(
+      this.orderRepo.create({
+        orderId: order.id, companyId, invoiceId: null, partyId: party.id, bankAccountId: account.id,
+        amount, currency: CURRENCY, createdBy: user.id,
+      }),
+    );
+    return {
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: this.keyId,
+      invoiceNumber: 'New sale',
+      merchantName: await this.merchantName(companyId),
+      customer: { name: party.name ?? '', email: party.email ?? '', contact: party.phone ?? '' },
+    };
+  }
+
+  /**
+   * Before the invoice is saved: prove the browser's payment is real (signature + Razorpay's own record)
+   * and that it was made for this company and customer. Safe to repeat if saving the invoice has to be retried.
+   */
+  async claimDraftPayment(dto: VerifyRazorpayPaymentDto, companyId: number, partyId: number): Promise<RazorpayOrder> {
+    this.requireEnabled();
+    const order = await this.orderRepo.findOne({ where: { orderId: dto.orderId } });
+    if (!order || order.companyId !== companyId || order.partyId !== partyId) throw new BadRequestException('Unknown Razorpay order for this customer');
+    if (order.invoiceId !== null || order.status !== 'created') throw new BadRequestException('This Razorpay payment was already used');
+    const expected = crypto.createHmac('sha256', this.keySecret).update(`${dto.orderId}|${dto.paymentId}`).digest('hex');
+    if (!safeEqual(expected, dto.signature)) {
+      this.logger.warn(`Bad Razorpay signature for draft order ${dto.orderId}`);
+      throw new BadRequestException('Payment signature could not be verified');
+    }
+    await this.confirmWithRazorpay(order, dto.paymentId);
+    return order;
+  }
+
+  /** Inside the invoice's transaction: tie the paid draft order to the invoice and its payment row. */
+  async attachDraftPayment(manager: EntityManager, orderId: string, paymentId: string, invoiceId: number, paymentRecordId: number) {
+    const claimed = await manager
+      .createQueryBuilder()
+      .update(RazorpayOrder)
+      .set({ status: 'paid', razorpayPaymentId: paymentId, paidAt: new Date().toISOString(), invoiceId, paymentRecordId })
+      .where('order_id = :orderId AND status = :status AND invoice_id IS NULL', { orderId, status: 'created' })
+      .execute();
+    if (!claimed.affected) throw new BadRequestException('This Razorpay payment was already used');
   }
 
   // ── step 2: verify what Checkout returned and record the payment ─────────
@@ -208,6 +309,7 @@ export class RazorpayService {
 
     const order = await this.orderRepo.findOne({ where: { orderId } });
     if (!order) return { status: 'unknown_order' }; // not ours; acknowledge so Razorpay stops retrying
+    if (!order.invoiceId) return { status: 'draft_order' }; // pay-first: the browser saves the invoice and records the payment
 
     if (round2(payment.amount / 100) !== order.amount || payment.currency !== order.currency) {
       this.logger.error(`Webhook amount mismatch for ${orderId}: got ${payment.amount} ${payment.currency}`);
@@ -253,7 +355,7 @@ export class RazorpayService {
       if (!claimed.affected) return; // already settled
 
       const order = await manager.findOneByOrFail(RazorpayOrder, { orderId });
-      const invoice = await manager.findOne(Invoice, { where: { id: order.invoiceId } });
+      const invoice = order.invoiceId ? await manager.findOne(Invoice, { where: { id: order.invoiceId } }) : null;
 
       // If the invoice was settled some other way while the customer was paying, keep the
       // money but record it on account instead of against the invoice.
@@ -264,10 +366,11 @@ export class RazorpayService {
         order.companyId,
         {
           partyId: order.partyId,
-          invoiceId: applies ? order.invoiceId : undefined,
+          invoiceId: applies ? order.invoiceId! : undefined,
           direction: PaymentDirection.IN,
           amount: order.amount,
           method: 'razorpay',
+          accountId: order.bankAccountId ?? undefined,
           reference: paymentId,
           notes: applies ? undefined : `Razorpay payment for order ${orderId}; invoice balance had changed, recorded on account`,
         },
@@ -281,7 +384,7 @@ export class RazorpayService {
   }
 
   private async result(order: RazorpayOrder) {
-    const invoice = await this.invoiceRepo.findOne({ where: { id: order.invoiceId } });
+    const invoice = order.invoiceId ? await this.invoiceRepo.findOne({ where: { id: order.invoiceId } }) : null;
     return {
       status: order.status,
       paymentId: order.razorpayPaymentId,

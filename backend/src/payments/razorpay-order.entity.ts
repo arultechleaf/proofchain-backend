@@ -21,11 +21,16 @@ export class RazorpayOrder {
   @Column({ name: 'company_id', type: 'int' })
   companyId: number;
 
-  @Column({ name: 'invoice_id', type: 'int' })
-  invoiceId: number;
+  /** Null for a "draft" order: Razorpay is paid first and the invoice is created right after. */
+  @Column({ name: 'invoice_id', type: 'int', nullable: true })
+  invoiceId: number | null;
 
   @Column({ name: 'party_id', type: 'int' })
   partyId: number;
+
+  /** Bank account credited when this online payment is confirmed. */
+  @Column({ name: 'bank_account_id', type: 'int', nullable: true })
+  bankAccountId: number | null;
 
   /** Amount in rupees (Razorpay itself works in paise). */
   @Column({ type: 'double' })

@@ -48,6 +48,7 @@ export class BankAccount {
 @Entity('bank_transactions')
 @Index(['companyId', 'transactionDate'])
 @Index(['accountId'])
+@Index(['paymentId'], { unique: true })
 export class BankTransaction {
   @PrimaryGeneratedColumn()
   id: number;
@@ -57,6 +58,10 @@ export class BankTransaction {
 
   @Column({ name: 'account_id', type: 'int' })
   accountId: number;
+
+  /** Links an automatically generated cash/bank movement to its payment record. */
+  @Column({ name: 'payment_id', type: 'int', nullable: true })
+  paymentId: number | null;
 
   @Column({ type: 'varchar', length: 20 })
   type: BankTxType;

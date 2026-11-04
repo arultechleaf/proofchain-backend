@@ -21,6 +21,7 @@ import { Company } from '../companies/company.entity';
 import { PaymentsService } from '../payments/payments.service';
 import { PaymentDirection } from '../payments/payment.entity';
 import { LineCalc, calcLine, calcTotals, supplyKind } from './gst';
+import { RazorpayService, VerifyRazorpayPaymentDto } from '../payments/razorpay.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuthUser, assertAccess, readScope, round2, writeCompanyId } from '../common/tenant';
 
@@ -66,6 +67,10 @@ export class InvoiceLineDto {
 }
 
 export class CreateInvoiceDto {
+  /** A Razorpay payment taken just before saving (pay first). It becomes the payment on this invoice. */
+  @IsOptional() @ValidateNested() @Type(() => VerifyRazorpayPaymentDto)
+  razorpay?: VerifyRazorpayPaymentDto;
+
   @Type(() => Number) @IsInt()
   partyId: number;
 
@@ -99,6 +104,10 @@ export class CreateInvoiceDto {
   @IsOptional() @IsNumber() @Min(0) @Type(() => Number)
   amountReceived?: number;
 
+  /** Cash/bank account to update when money is received or paid at billing. */
+  @IsOptional() @Type(() => Number) @IsInt()
+  accountId?: number;
+
   @IsOptional() @IsString() @MaxLength(30)
   customerMobile?: string;
 
@@ -130,6 +139,10 @@ export class InvoiceQueryDto {
   @IsOptional() @Type(() => Number) @IsInt()
   partyId?: number;
 
+  /** "true" = GST invoices only, "false" = Non-GST sales only; left out = both. */
+  @IsOptional() @IsIn(['true', 'false'])
+  gst?: string;
+
   @IsOptional() @IsString()
   from?: string;
 
@@ -147,6 +160,8 @@ const NUMBER_PREFIX: Record<InvoiceType, string> = {
   [InvoiceType.SALE]: 'INV',
   [InvoiceType.PURCHASE]: 'BILL',
 };
+/** Non-GST sales have their own number series, so they never use up GST invoice numbers. */
+const NON_GST_PREFIX = 'NGS';
 
 /** True for a unique-index violation from MySQL or SQLite. */
 function isDuplicateKey(err: unknown): boolean {
@@ -170,16 +185,18 @@ export class InvoicesService {
     @InjectRepository(Company) private readonly companyRepo: Repository<Company>,
     @InjectRepository(CompanySettings) private readonly settingsRepo: Repository<CompanySettings>,
     private readonly payments: PaymentsService,
+    private readonly razorpay: RazorpayService,
   ) {}
 
-  async create(type: InvoiceType, dto: CreateInvoiceDto, user: AuthUser): Promise<Invoice> {
+  async create(type: InvoiceType, dto: CreateInvoiceDto, user: AuthUser, opts: { gst?: boolean } = {}): Promise<Invoice> {
     const companyId = writeCompanyId(user);
+    const gst = opts.gst !== false;
 
     const party = await this.partyRepo.findOne({ where: { id: dto.partyId } });
     if (!party || party.companyId !== companyId) throw new BadRequestException('Party not found');
 
     const manualNumber = dto.invoiceNumber?.trim();
-    let invoiceNumber = manualNumber || (await this.nextNumber(companyId, type));
+    let invoiceNumber = manualNumber || (await this.nextNumber(companyId, type, gst));
     const duplicate = await this.invoiceRepo.findOne({ where: { companyId, type, invoiceNumber } });
     if (duplicate) throw new ConflictException(`Invoice number ${invoiceNumber} already exists`);
 
@@ -200,7 +217,7 @@ export class InvoicesService {
 
       const rate = l.rate ?? (item ? (type === InvoiceType.SALE ? item.salePrice : item.purchasePrice) : undefined);
       if (rate === undefined) throw new BadRequestException(`Line ${index + 1} needs a rate`);
-      const taxRate = l.taxRate ?? item?.taxRate ?? 0;
+      const taxRate = gst ? (l.taxRate ?? item?.taxRate ?? 0) : 0;
 
       const calc = calcLine({ quantity: l.quantity, rate, taxRate, discountType: l.discountType, discountValue: l.discountValue });
       if ('error' in calc) throw new BadRequestException(`Line ${index + 1}: ${calc.error}`);
@@ -235,16 +252,25 @@ export class InvoicesService {
 
     // CGST + SGST inside one state, IGST between states (decided from the two GSTINs / place of supply).
     const company = await this.companyRepo.findOne({ where: { id: companyId } });
-    const customerGstin = (dto.customerGstin ?? party.taxId ?? '').trim().toUpperCase() || null;
-    const kind = supplyKind(company?.gstin, customerGstin, dto.placeOfSupply);
+    const customerGstin = gst ? ((dto.customerGstin ?? party.taxId ?? '').trim().toUpperCase() || null) : null;
+    const kind = supplyKind(company?.gstin, customerGstin, gst ? dto.placeOfSupply : undefined);
     const totals = calcTotals(calcs, kind, { extraDiscount: dto.discount, roundOff: dto.roundOff });
     if ('error' in totals) throw new BadRequestException(totals.error);
     const { subtotal, taxTotal, discount, total } = totals;
 
-    const paymentType = dto.paymentType ?? 'credit';
-    const received = round2(dto.amountReceived ?? 0);
+    // Pay first: the customer has already paid through Razorpay, so that payment is this invoice's UPI payment.
+    if (dto.razorpay && type !== InvoiceType.SALE) throw new BadRequestException('Online payment is only for sales');
+    const paid = dto.razorpay ? await this.razorpay.claimDraftPayment(dto.razorpay, companyId, party.id) : null;
+    const paymentType = paid ? 'upi' : (dto.paymentType ?? 'credit');
+    const received = paid ? paid.amount : round2(dto.amountReceived ?? 0);
     if (paymentType === 'credit' && received > 0) {
       throw new BadRequestException('A credit invoice has nothing received at billing. Choose cash, UPI or bank, or record the payment later.');
+    }
+    if (received > 0 && (paymentType === 'cash' || paymentType === 'bank') && !dto.accountId) {
+      throw new BadRequestException(`Select a ${paymentType} account for this payment`);
+    }
+    if (dto.accountId && paymentType !== 'cash' && paymentType !== 'bank') {
+      throw new BadRequestException('A cash/bank account can only be selected for cash or bank payments');
     }
     if (received > total) throw new BadRequestException(`Amount received (${received}) cannot be more than the grand total (${total})`);
 
@@ -253,12 +279,12 @@ export class InvoicesService {
     const persist = () => this.invoiceRepo.manager.transaction(async (manager) => {
       const invoice = await manager.save(
         manager.create(Invoice, {
-          companyId, type, invoiceNumber, partyId: party.id, invoiceDate,
+          companyId, type, isGst: gst, invoiceNumber, partyId: party.id, invoiceDate,
           dueDate: dto.dueDate ?? null, subtotal, taxTotal, discount, total,
           taxableValue: totals.taxableValue, cgst: totals.cgst, sgst: totals.sgst, igst: totals.igst, roundOff: totals.roundOff,
           paymentType, customerMobile: dto.customerMobile?.trim() || party.phone || null, customerGstin,
           billingAddress: dto.billingAddress?.trim() || party.address || null,
-          placeOfSupply: dto.placeOfSupply?.trim() || (customerGstin && /^\d{2}/.test(customerGstin) ? customerGstin.slice(0, 2) : null),
+          placeOfSupply: !gst ? null : dto.placeOfSupply?.trim() || (customerGstin && /^\d{2}/.test(customerGstin) ? customerGstin.slice(0, 2) : null),
           paidAmount: 0, status: InvoiceStatus.ISSUED, notes: dto.notes ?? null, createdBy: user.id, branchId: branch.id,
         }),
       );
@@ -273,21 +299,23 @@ export class InvoicesService {
         );
       }
       if (received > 0) {
-        await this.payments.record(
+        const payment = await this.payments.record(
           companyId,
           {
             partyId: party.id,
             invoiceId: invoice.id,
             direction: type === InvoiceType.SALE ? PaymentDirection.IN : PaymentDirection.OUT,
             amount: received,
-            method: paymentType,
+            method: paid ? 'razorpay' : paymentType,
+            accountId: paid ? (paid.bankAccountId ?? undefined) : dto.accountId,
             paymentDate: invoiceDate,
-            reference: invoiceNumber,
-            notes: 'Taken at billing',
+            reference: paid ? dto.razorpay!.paymentId : invoiceNumber,
+            notes: paid ? 'Paid online with Razorpay before the invoice was saved' : 'Taken at billing',
           },
           user.id,
           manager,
         );
+        if (paid) await this.razorpay.attachDraftPayment(manager, paid.orderId, dto.razorpay!.paymentId, invoice.id, payment.id);
       }
       return invoice;
     });
@@ -303,7 +331,7 @@ export class InvoicesService {
         if (manualNumber || attempt >= 12 || !isDuplicateKey(err)) throw err;
         // A short random pause stops several losers retrying in lockstep and colliding again.
         await new Promise((r) => setTimeout(r, 20 + Math.floor(Math.random() * 60)));
-        invoiceNumber = await this.nextNumber(companyId, type);
+        invoiceNumber = await this.nextNumber(companyId, type, gst);
       }
     }
 
@@ -312,13 +340,13 @@ export class InvoicesService {
       actorId: user.id,
       action: type === InvoiceType.SALE ? 'INVOICE_CREATED' : 'BILL_CREATED',
       resourceType: 'invoice', resourceId: saved.id,
-      details: { invoiceNumber, total, partyId: party.id },
+      details: { invoiceNumber, total, partyId: party.id, ...(gst ? {} : { nonGst: true }) },
     });
     await this.notifications.notifyCompany(companyId, {
       type: 'invoice',
       title: type === InvoiceType.SALE ? 'Invoice created' : 'Bill created',
       message: `${invoiceNumber} for ${party.name} (${total}) was created by ${user.name}.`,
-      link: `/${type === InvoiceType.SALE ? 'sales' : 'purchases'}/${saved.id}`,
+      link: `/${type === InvoiceType.PURCHASE ? 'purchases' : gst ? 'sales' : 'non-gst-sales'}/${saved.id}`,
     }, user.id);
     return this.findById(saved.id, user);
   }
@@ -335,6 +363,7 @@ export class InvoicesService {
     const scope = readScope(user);
     if (scope) qb.andWhere('i.companyId = :scope', { scope });
     if (query.type) qb.andWhere('i.type = :type', { type: query.type });
+    if (query.gst) qb.andWhere('i.isGst = :isGst', { isGst: query.gst === 'true' });
     if (query.status) qb.andWhere('i.status = :status', { status: query.status });
     if (query.partyId) qb.andWhere('i.partyId = :partyId', { partyId: query.partyId });
     if (query.from) qb.andWhere('i.invoiceDate >= :from', { from: query.from });
@@ -484,23 +513,23 @@ export class InvoicesService {
   }
 
   /** The number the next document of this type will get, for the "new invoice" form. */
-  async previewNextNumber(type: InvoiceType, user: AuthUser): Promise<{ invoiceNumber: string; type: InvoiceType; sellerGstin: string | null }> {
+  async previewNextNumber(type: InvoiceType, user: AuthUser, gst = true): Promise<{ invoiceNumber: string; type: InvoiceType; sellerGstin: string | null }> {
     const companyId = writeCompanyId(user);
     const company = await this.companyRepo.findOne({ where: { id: companyId } });
     // The seller's GSTIN lets the form work out CGST + SGST versus IGST while the user types.
-    return { invoiceNumber: await this.nextNumber(companyId, type), type, sellerGstin: company?.gstin ?? null };
+    return { invoiceNumber: await this.nextNumber(companyId, type, gst), type, sellerGstin: company?.gstin ?? null };
   }
 
   /**
    * PREFIX-YEAR-0001, counting on from the highest number already used this year (so deleting or
    * cancelling a document never makes a number repeat), and starting again at 0001 each year.
    */
-  private async nextNumber(companyId: number, type: InvoiceType): Promise<string> {
+  private async nextNumber(companyId: number, type: InvoiceType, gst = true): Promise<string> {
     const year = new Date().getFullYear();
     // each company can choose its own prefix (My company > Bank & invoice settings); INV / BILL until it does
     const settings = await this.settingsRepo.findOne({ where: { companyId } });
     const chosen = type === InvoiceType.SALE ? settings?.salesPrefix : settings?.purchasePrefix;
-    const prefix = `${chosen || NUMBER_PREFIX[type]}-${year}-`;
+    const prefix = `${gst ? (chosen || NUMBER_PREFIX[type]) : NON_GST_PREFIX}-${year}-`;
     const rows = await this.invoiceRepo
       .createQueryBuilder('i')
       .select('i.invoiceNumber', 'invoiceNumber')
