@@ -230,9 +230,12 @@ export class DeliveriesService {
       qb.andWhere('d.status = :status', { status: query.status });
     }
     if (query.search) {
+      // a reference or description, or the proof's payload hash / blockchain transaction hash (0x…)
+      const term = query.search.trim();
       qb.andWhere(
-        '(d.deliveryReference LIKE :s OR d.description LIKE :s)',
-        { s: `%${query.search}%` },
+        `(d.deliveryReference LIKE :s OR d.description LIKE :s OR d.payloadHash = :h
+          OR d.id IN (SELECT t.delivery_id FROM blockchain_transactions t WHERE t.transaction_hash = :h))`,
+        { s: `%${term}%`, h: term },
       );
     }
 

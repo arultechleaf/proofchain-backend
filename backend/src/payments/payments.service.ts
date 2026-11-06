@@ -132,7 +132,8 @@ export class PaymentsService {
     if (!PAYMENT_METHODS.includes(method)) {
       throw new BadRequestException(`method must be one of: ${PAYMENT_METHODS.join(', ')}`);
     }
-    const accountRequired = method === 'cash' || method === 'bank';
+    // cash in hand needs no account; only a bank payment must say which bank received it
+    const accountRequired = method === 'bank';
     if (accountRequired && !dto.accountId) {
       throw new BadRequestException(`Select a ${method} account for this payment`);
     }
@@ -171,6 +172,7 @@ export class PaymentsService {
         }
       }
 
+      let invoiceNumber: string | null = null;
       if (dto.invoiceId) {
         const invoice = await manager.findOne(Invoice, { where: { id: dto.invoiceId } });
         if (!invoice || invoice.companyId !== companyId || invoice.partyId !== party.id) {
@@ -179,6 +181,7 @@ export class PaymentsService {
         if (invoice.status === InvoiceStatus.CANCELLED) {
           throw new BadRequestException('Cannot record a payment against a cancelled invoice');
         }
+        invoiceNumber = invoice.invoiceNumber;
         const expected = invoice.type === InvoiceType.SALE ? PaymentDirection.IN : PaymentDirection.OUT;
         if (dto.direction !== expected) {
           throw new BadRequestException(
@@ -218,7 +221,12 @@ export class PaymentsService {
             type: dto.direction === PaymentDirection.IN ? BankTxType.DEPOSIT : BankTxType.WITHDRAWAL,
             amount,
             transactionDate: saved.paymentDate,
-            description: `${dto.direction === PaymentDirection.IN ? 'Received from' : 'Paid to'} ${party.name}`,
+            // e.g. "Received from Acme Retail · INV-0007 · UPI (Razorpay)"
+            description: [
+              `${dto.direction === PaymentDirection.IN ? 'Received from' : 'Paid to'} ${party.name}`,
+              invoiceNumber,
+              method === 'razorpay' ? 'UPI (Razorpay)' : method.toUpperCase(),
+            ].filter(Boolean).join(' · '),
             reference: dto.reference ?? null,
             createdBy: actorId,
           }),

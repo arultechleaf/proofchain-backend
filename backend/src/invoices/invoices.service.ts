@@ -266,8 +266,8 @@ export class InvoicesService {
     if (paymentType === 'credit' && received > 0) {
       throw new BadRequestException('A credit invoice has nothing received at billing. Choose cash, UPI or bank, or record the payment later.');
     }
-    if (received > 0 && (paymentType === 'cash' || paymentType === 'bank') && !dto.accountId) {
-      throw new BadRequestException(`Select a ${paymentType} account for this payment`);
+    if (received > 0 && paymentType === 'bank' && !dto.accountId) {
+      throw new BadRequestException('Select a bank account for this payment');
     }
     if (dto.accountId && paymentType !== 'cash' && paymentType !== 'bank') {
       throw new BadRequestException('A cash/bank account can only be selected for cash or bank payments');
