@@ -122,6 +122,9 @@ export const SYSTEM_ROLES: Array<{ key: string; name: string; description: strin
   { key: 'user', name: 'User', description: 'Limited access to own records' },
   { key: 'company_a', name: 'Company A (Sender)', description: 'Sender organization: creates deliveries' },
   { key: 'company_b', name: 'Company B (Receiver)', description: 'Receiver organization: approves deliveries' },
+  { key: 'customer', name: 'Customer', description: 'Namma Store mobile app: browses and orders from shops' },
+  { key: 'shop_owner', name: 'Shop owner', description: 'Namma Store mobile app: runs a shop, its products, stock and orders' },
+  { key: 'shop_worker', name: 'Shop worker', description: 'Namma Store mobile app: packs and delivers the shop orders' },
 ];
 
 interface ScreenDef { key: string; path: string; label: string; group: string }

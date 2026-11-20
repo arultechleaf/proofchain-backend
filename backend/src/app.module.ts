@@ -49,12 +49,15 @@ import { ItemBranchStock } from './items/item-branch-stock.entity';
 import { CompanySelfModule } from './company-self/company-self.module';
 import { RolePermissionsModule } from './role-permissions/role-permissions.module';
 import { DatabaseViewsModule } from './database/views.module';
+import { StoreModule } from './store/store.module';
+import { STORE_ENTITIES } from './store/store.entities';
 
 // Every table uses an auto-increment numeric id (1, 2, 3 ...); see database/migrate-to-numeric-ids.js.
 const ENTITIES = [
   User, Company, Delivery, Approval, BlockchainTransaction, ProofRecord, AuditLog,
   Party, Item, StockMovement, Invoice, InvoiceLine, Payment, RazorpayOrder, EmailOtp, Notification,
   BankAccount, BankTransaction, Expense, Quotation, QuotationLine, RolePermission, Role, Screen, UserScreenPermission, CompanySettings, Branch, ItemBranchStock,
+  ...STORE_ENTITIES,
 ];
 
 @Module({
@@ -132,6 +135,7 @@ const ENTITIES = [
     RolePermissionsModule,
     CompanySelfModule,
     DatabaseViewsModule,
+    StoreModule,
   ],
 })
 export class AppModule {}
