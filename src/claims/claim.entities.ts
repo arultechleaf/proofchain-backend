@@ -21,7 +21,11 @@ export class Claim {
   @PrimaryGeneratedColumn({ name: 'claim_id' }) id: number;
   @Column({ name: 'user_id', type: 'int' }) userId: number;
   @Column({ type: 'decimal', precision: 12, scale: 2 }) amount: string;
-  @Column({ type: 'enum', enum: ClaimStatus, default: ClaimStatus.PENDING })
+  @Column({
+    type: 'varchar',
+    length: 30,
+    default: ClaimStatus.PENDING,
+  })
   status: ClaimStatus;
   @Column({ name: 'wallet_id', type: 'int' }) walletId: number;
   @Column({ name: 'request_id', type: 'char', length: 36 }) requestId: string;
