@@ -1,10 +1,12 @@
 **/node_modules/
 **/dist/
 **/build/
+**/uploads/
 **/.env
 **/.env.*
 **/*.sqlite
 **/*.db
+*.log
 **/*.tsbuildinfo
 
 # database backups (contain password hashes)
