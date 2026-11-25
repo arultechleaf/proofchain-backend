@@ -101,6 +101,19 @@ const ENTITIES = [
           } as any;
         }
         const sslEnabled = config.get<string>('DB_SSL', 'false') === 'true';
+        const databaseUrl = config.get<string>('DATABASE_URL') || config.get<string>('MYSQL_URL');
+        if (databaseUrl) {
+          return {
+            type: 'mysql',
+            url: databaseUrl,
+            entities: ENTITIES,
+            synchronize: config.get<string>('DB_SYNCHRONIZE', 'false') === 'true',
+            logging: config.get<string>('DB_LOGGING', 'false') === 'true',
+            charset: 'utf8mb4',
+            timezone: 'Z',
+            ssl: sslEnabled ? { rejectUnauthorized: false } : undefined,
+          };
+        }
         return {
           type: 'mysql',
           host: config.get<string>('DB_HOST', 'localhost'),
