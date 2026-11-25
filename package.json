@@ -12,6 +12,8 @@
     "start": "nest start",
     "prestart:dev": "node scripts/ensure-port-free.js",
     "start:dev": "nest start --watch",
+    "predev": "node scripts/ensure-port-free.js",
+    "dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "oxlint src/ test/",
