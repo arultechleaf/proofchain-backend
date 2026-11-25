@@ -12,9 +12,23 @@ import { AuditModule } from '../audit/audit.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { BankAccount, BankTransaction } from '../cash-bank/cash-bank.entities';
 import { Company } from '../companies/company.entity';
+import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Payment, RazorpayOrder, Invoice, Party, BankAccount, BankTransaction, Company]), AuditModule, NotificationsModule],
+  imports: [
+    TypeOrmModule.forFeature([
+      Payment,
+      RazorpayOrder,
+      Invoice,
+      Party,
+      BankAccount,
+      BankTransaction,
+      Company,
+    ]),
+    AuditModule,
+    NotificationsModule,
+    WalletModule,
+  ],
   providers: [PaymentsService, RazorpayService],
   controllers: [PaymentsController, RazorpayController],
   exports: [PaymentsService, RazorpayService],

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import {
@@ -13,6 +13,7 @@ import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuthUser, readScope, round2, writeCompanyId } from '../common/tenant';
 import { AccountType, BankAccount, BankTransaction, BankTxType, CREDIT_TYPES } from '../cash-bank/cash-bank.entities';
+import { WalletService } from '../wallet/wallet.service';
 
 export const PAYMENT_METHODS = ['cash', 'bank', 'upi', 'card', 'cheque', 'razorpay', 'other'];
 
@@ -69,12 +70,15 @@ export class PaymentQueryDto {
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     @InjectRepository(Payment) private readonly paymentRepo: Repository<Payment>,
     @InjectRepository(Invoice) private readonly invoiceRepo: Repository<Invoice>,
     @InjectRepository(Party) private readonly partyRepo: Repository<Party>,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    private readonly wallets: WalletService,
   ) {}
 
   /** Delete a payment and take it back off the invoice it settled. */
@@ -86,6 +90,7 @@ export class PaymentsService {
       if (await m.count(RazorpayOrder, { where: { paymentRecordId: id } })) {
         throw new BadRequestException('Online (Razorpay) payments cannot be deleted because the money was really collected');
       }
+      await this.wallets.reverseIncomingPayment(m, payment.id, user.id);
       await m.delete(BankTransaction, { paymentId: id }); // the cash/bank movement this payment made goes with it
       if (payment.invoiceId) {
         const invoice = await m.findOne(Invoice, { where: { id: payment.invoiceId } });
@@ -212,6 +217,20 @@ export class PaymentsService {
           createdBy: actorId,
         }),
       );
+      if (saved.direction === PaymentDirection.IN) {
+        if (actorId === null) {
+          this.logger.warn(
+            `Incoming payment ${saved.id} has no creator; wallet credit was not posted`,
+          );
+        } else {
+          await this.wallets.creditIncomingPayment(
+            manager,
+            actorId,
+            saved.id,
+            amount,
+          );
+        }
+      }
       if (account) {
         await manager.save(
           manager.create(BankTransaction, {

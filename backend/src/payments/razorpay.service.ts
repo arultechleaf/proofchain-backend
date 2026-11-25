@@ -279,7 +279,7 @@ export class RazorpayService {
     }
 
     await this.confirmWithRazorpay(order, dto.paymentId);
-    const settled = await this.settle(order.orderId, dto.paymentId, user.id);
+    const settled = await this.settle(order.orderId, dto.paymentId);
     return this.result(settled);
   }
 
@@ -315,7 +315,7 @@ export class RazorpayService {
       this.logger.error(`Webhook amount mismatch for ${orderId}: got ${payment.amount} ${payment.currency}`);
       return { status: 'amount_mismatch' };
     }
-    await this.settle(orderId, payment.id, null);
+    await this.settle(orderId, payment.id);
     return { status: 'ok' };
   }
 
@@ -345,7 +345,7 @@ export class RazorpayService {
    * Mark the order paid and record the Payment, exactly once. The conditional update is the
    * gate: whichever of verify/webhook gets there first wins and the other becomes a no-op.
    */
-  private async settle(orderId: string, paymentId: string, actorId: number | null): Promise<RazorpayOrder> {
+  private async settle(orderId: string, paymentId: string): Promise<RazorpayOrder> {
     await this.orderRepo.manager.transaction(async (manager) => {
       const claimed = await manager.update(
         RazorpayOrder,
@@ -374,7 +374,7 @@ export class RazorpayService {
           reference: paymentId,
           notes: applies ? undefined : `Razorpay payment for order ${orderId}; invoice balance had changed, recorded on account`,
         },
-        actorId,
+        order.createdBy,
         manager,
       );
       await manager.update(RazorpayOrder, { orderId }, { paymentRecordId: payment.id });

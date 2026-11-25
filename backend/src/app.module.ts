@@ -51,6 +51,10 @@ import { RolePermissionsModule } from './role-permissions/role-permissions.modul
 import { DatabaseViewsModule } from './database/views.module';
 import { StoreModule } from './store/store.module';
 import { STORE_ENTITIES } from './store/store.entities';
+import { Wallet, WalletTransaction } from './wallet/wallet.entities';
+import { Claim, ClaimBankAccount } from './claims/claim.entities';
+import { WalletModule } from './wallet/wallet.module';
+import { ClaimsModule } from './claims/claims.module';
 
 // Every table uses an auto-increment numeric id (1, 2, 3 ...); see database/migrate-to-numeric-ids.js.
 const ENTITIES = [
@@ -58,6 +62,7 @@ const ENTITIES = [
   Party, Item, StockMovement, Invoice, InvoiceLine, Payment, RazorpayOrder, EmailOtp, Notification,
   BankAccount, BankTransaction, Expense, Quotation, QuotationLine, RolePermission, Role, Screen, UserScreenPermission, CompanySettings, Branch, ItemBranchStock,
   ...STORE_ENTITIES,
+  Wallet, WalletTransaction, Claim, ClaimBankAccount,
 ];
 
 @Module({
@@ -136,6 +141,8 @@ const ENTITIES = [
     CompanySelfModule,
     DatabaseViewsModule,
     StoreModule,
+    WalletModule,
+    ClaimsModule,
   ],
 })
 export class AppModule {}
