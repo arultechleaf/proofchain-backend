@@ -11,7 +11,7 @@ version: "3.8"
 #   besu-node2    — Hyperledger Besu validator (Company B)
 #   besu-node3    — Hyperledger Besu validator (Auditor)
 # ============================================================
-# Start with: docker compose --env-file backend/.env up --build
+# Start with: docker compose --env-file .env up --build
 
 services:
   # ─── MySQL Database ─────────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./backend/network/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./network/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - proofchain_net
     healthcheck:
@@ -45,8 +45,8 @@ services:
     environment:
       - BESU_OPTS=-Xmx512m
     volumes:
-      - ./backend/network/besu/node1:/opt/besu/data
-      - ./backend/network/besu/genesis.json:/opt/besu/genesis.json:ro
+      - ./network/besu/node1:/opt/besu/data
+      - ./network/besu/genesis.json:/opt/besu/genesis.json:ro
     command:
       - --data-path=/opt/besu/data
       - --genesis-file=/opt/besu/genesis.json
@@ -81,8 +81,8 @@ services:
     environment:
       - BESU_OPTS=-Xmx512m
     volumes:
-      - ./backend/network/besu/node2:/opt/besu/data
-      - ./backend/network/besu/genesis.json:/opt/besu/genesis.json:ro
+      - ./network/besu/node2:/opt/besu/data
+      - ./network/besu/genesis.json:/opt/besu/genesis.json:ro
     command:
       - --data-path=/opt/besu/data
       - --genesis-file=/opt/besu/genesis.json
@@ -115,8 +115,8 @@ services:
     environment:
       - BESU_OPTS=-Xmx512m
     volumes:
-      - ./backend/network/besu/node3:/opt/besu/data
-      - ./backend/network/besu/genesis.json:/opt/besu/genesis.json:ro
+      - ./network/besu/node3:/opt/besu/data
+      - ./network/besu/genesis.json:/opt/besu/genesis.json:ro
     command:
       - --data-path=/opt/besu/data
       - --genesis-file=/opt/besu/genesis.json
@@ -144,12 +144,12 @@ services:
   # ─── NestJS Backend ──────────────────────────────────────────────────────────
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     container_name: proofchain_backend
     restart: unless-stopped
     env_file:
-      - ./backend/.env
+      - ./.env
     environment:
       - DB_HOST=mysql
       - BESU_RPC_URL=http://besu-node1:8545
@@ -161,7 +161,7 @@ services:
       besu-node1:
         condition: service_healthy
     volumes:
-      - ./backend:/app
+      - ./:/app
       - /app/node_modules
     networks:
       - proofchain_net

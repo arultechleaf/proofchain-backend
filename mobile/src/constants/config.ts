@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-/** The backend runs on port 3002 (APP_PORT in backend/.env). */
+/** The backend runs on port 3002 (APP_PORT in the backend .env file). */
 const DEFAULT_PORT = 3002;
 
 /**

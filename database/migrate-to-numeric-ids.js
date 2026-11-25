@@ -5,7 +5,7 @@
  *   node database/migrate-to-numeric-ids.js --check   read-only: reports what would happen, changes nothing
  *   node database/migrate-to-numeric-ids.js --yes     performs the migration (take a backup first!)
  *
- * It uses the database in backend/.env. It refuses to run twice. Afterwards it re-computes the SHA-256 proof hashes of
+ * It uses the database in .env. It refuses to run twice. Afterwards it re-computes the SHA-256 proof hashes of
  * deliveries and invoices (they include ids), and rewrites ids that appear inside audit-log details and notification links.
  */
 require('dotenv').config({ quiet: true });

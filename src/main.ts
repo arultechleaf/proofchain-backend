@@ -15,15 +15,27 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // ── CORS ───────────────────────────────────────────────────────────────────
-  // CORS_ORIGIN may list several frontends, comma-separated.
-  const corsOrigin = (
-    process.env.CORS_ORIGIN || 'http://localhost:3001,http://localhost:3002'
+  // CORS_ORIGIN may list several frontends, comma-separated. Also allows Vercel preview/production domains.
+  const configuredOrigins = (
+    process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:3001,http://localhost:3002'
   )
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean);
+
   app.enableCors({
-    origin: corsOrigin,
+    origin: (origin, callback) => {
+      // allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+      if (!origin) return callback(null, true);
+      if (
+        configuredOrigins.includes('*') ||
+        configuredOrigins.includes(origin) ||
+        /\.vercel\.app$/.test(new URL(origin).hostname)
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   });
@@ -67,10 +79,10 @@ async function bootstrap() {
   });
 
   // ── Start ──────────────────────────────────────────────────────────────────
-  const port = process.env.APP_PORT ?? 3001;
-  await app.listen(port);
-  logger.log(`🚀 ProofChain API running on http://localhost:${port}/api`);
-  logger.log(`📄 Swagger docs at http://localhost:${port}/api/docs`);
+  const port = Number(process.env.PORT || process.env.APP_PORT || 3001);
+  await app.listen(port, '0.0.0.0');
+  logger.log(`🚀 ProofChain API running on port ${port} (/api)`);
+  logger.log(`📄 Swagger docs at /api/docs`);
 }
 
 bootstrap();

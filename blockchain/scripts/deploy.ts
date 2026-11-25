@@ -45,14 +45,17 @@ async function main() {
   console.log(`📄 Deployment info saved to: ${deploymentPath}`);
 
   // Also write into the backend config directory if it exists
-  const backendConfigPath = path.join(
-    __dirname,
-    "../../src/blockchain/contract-config.json"
-  );
-  const backendConfigDir = path.dirname(backendConfigPath);
-  if (fs.existsSync(backendConfigDir)) {
-    fs.writeFileSync(backendConfigPath, JSON.stringify(deploymentInfo, null, 2));
-    console.log(`📄 Deployment info also saved to: ${backendConfigPath}`);
+  const candidateConfigDirs = [
+    path.join(__dirname, "../src/blockchain"),
+    path.join(__dirname, "../../src/blockchain"),
+  ];
+  for (const dir of candidateConfigDirs) {
+    if (fs.existsSync(dir)) {
+      const cfgPath = path.join(dir, "contract-config.json");
+      fs.writeFileSync(cfgPath, JSON.stringify(deploymentInfo, null, 2));
+      console.log(`📄 Deployment info also saved to: ${cfgPath}`);
+      break;
+    }
   }
 
   // Write ABI

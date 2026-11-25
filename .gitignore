@@ -2,6 +2,7 @@
 **/dist/
 **/build/
 **/uploads/
+blockchain/cache/
 **/.env
 **/.env.*
 **/*.sqlite
@@ -9,5 +10,8 @@
 *.log
 **/*.tsbuildinfo
 
+# legacy folder
+backend/
+
 # database backups (contain password hashes)
-backend/database/backups/
+database/backups/

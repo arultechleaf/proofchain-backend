@@ -70,7 +70,7 @@ const ENTITIES = [
     // ── Configuration ──────────────────────────────────────────────────────
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env', '../.env'],
+      envFilePath: '.env',
     }),
 
     // ── Rate Limiting ─────────────────────────────────────────────────────
@@ -100,10 +100,11 @@ const ENTITIES = [
             logging: config.get<string>('DB_LOGGING', 'false') === 'true',
           } as any;
         }
+        const sslEnabled = config.get<string>('DB_SSL', 'false') === 'true';
         return {
           type: 'mysql',
           host: config.get<string>('DB_HOST', 'localhost'),
-          port: config.get<number>('DB_PORT', 3306),
+          port: Number(config.get<number | string>('DB_PORT', 3306)),
           username: config.get<string>('DB_USERNAME', 'proofchain'),
           password: config.get<string>('DB_PASSWORD', ''),
           database: config.get<string>('DB_DATABASE', 'proofchain_db'),
@@ -112,6 +113,7 @@ const ENTITIES = [
           logging: config.get<string>('DB_LOGGING', 'false') === 'true',
           charset: 'utf8mb4',
           timezone: 'Z',
+          ssl: sslEnabled ? { rejectUnauthorized: false } : undefined,
         };
       },
     }),
