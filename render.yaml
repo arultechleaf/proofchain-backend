@@ -1,0 +1,35 @@
+
+
+# Render Blueprint for the ProofChain API (NestJS).
+# Render dashboard -> New -> Blueprint -> pick this repo. It creates a Web Service
+# (never a Static Site), so there is no "Publish Directory" to fill in.
+#
+# Secrets are not stored here. After the service is created, open it ->
+# Environment -> "Add from .env" and paste the rest (JWT, Razorpay, SMTP, OTP ...).
+services:
+  - type: web
+    name: proofchain-backend
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: yarn install --frozen-lockfile && yarn build
+    startCommand: node dist/main
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_TYPE
+        value: mysql
+      - key: DB_SYNCHRONIZE
+        value: "false"
+      - key: DB_LOGGING
+        value: "false"
+      - key: BLOCKCHAIN_MODE
+        value: demo
+      # Railway MySQL public URL (MYSQL_PUBLIC_URL). Render asks for it when the Blueprint is created.
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
