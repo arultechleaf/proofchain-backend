@@ -70,7 +70,9 @@ const ENTITIES = [
     // ── Configuration ──────────────────────────────────────────────────────
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      // .env.local (gitignored, local machine only) overrides .env.
+      // On hosting neither file exists, so platform env vars (e.g. MYSQL_URL) are used.
+      envFilePath: ['.env.local', '.env'],
     }),
 
     // ── Rate Limiting ─────────────────────────────────────────────────────

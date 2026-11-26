@@ -13,5 +13,9 @@ blockchain/cache/
 # legacy folder
 backend/
 
+# frontend is its own repo (proofchain-frontend); keeping it out stops Render's
+# submodule step failing with "no submodule mapping found in .gitmodules"
+/frontend/
+
 # database backups (contain password hashes)
 database/backups/
