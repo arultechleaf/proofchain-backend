@@ -213,7 +213,7 @@ const DEFAULTS: Record<string, RoleLevels> = {
   users:             ['full', 'none', 'read', 'none', 'none', 'none'],
   roles:             ['full', 'none', 'none', 'none', 'none', 'none'],
   subscription_plans: ['full', 'none', 'none', 'none', 'none', 'none'],
-  subscription:      ['none', 'full', 'full', 'full', 'full', 'full'],
+  subscription:      ['full', 'full', 'full', 'full', 'full', 'full'],
   settings:          ['full', 'read', 'read', 'read', 'read', 'read'],
   profile:           ['full', 'full', 'full', 'full', 'full', 'full'],
 };
