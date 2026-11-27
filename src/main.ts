@@ -78,6 +78,13 @@ async function bootstrap() {
     swaggerOptions: { persistAuthorization: true },
   });
 
+  // ── Root ───────────────────────────────────────────────────────────────────
+  // Every route lives under /api; answer the bare address too so opening the
+  // service URL shows it is up instead of "Cannot GET /".
+  app.getHttpAdapter().get('/', (_req: unknown, res: { json: (body: unknown) => void }) => {
+    res.json({ name: 'ProofChain API', status: 'ok', health: '/api/health', docs: '/api/docs' });
+  });
+
   // ── Start ──────────────────────────────────────────────────────────────────
   const port = Number(process.env.PORT || process.env.APP_PORT || 3001);
   await app.listen(port, '0.0.0.0');
