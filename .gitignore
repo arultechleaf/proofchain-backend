@@ -19,3 +19,6 @@ backend/
 
 # database backups (contain password hashes)
 database/backups/
+
+# env examples hold no secrets and are shared
+!.env.example
