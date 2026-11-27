@@ -164,6 +164,8 @@ export const SCREEN_DEFS: ScreenDef[] = [
   { key: 'organizations', path: '/organizations', label: 'Organizations', group: 'Administration' },
   { key: 'users', path: '/users', label: 'Users', group: 'Administration' },
   { key: 'roles', path: '/roles', label: 'Roles & permissions', group: 'Administration' },
+  { key: 'subscription_plans', path: '/subscription-plans', label: 'Subscription plans', group: 'Administration' },
+  { key: 'subscription', path: '/subscription', label: 'My subscription', group: 'Administration' },
   { key: 'settings', path: '/settings', label: 'Settings', group: 'Administration' },
   { key: 'profile', path: '/profile', label: 'My profile', group: 'Administration' },
 ];
@@ -210,6 +212,8 @@ const DEFAULTS: Record<string, RoleLevels> = {
   organizations:     ['full', 'none', 'read', 'none', 'none', 'none'],
   users:             ['full', 'none', 'read', 'none', 'none', 'none'],
   roles:             ['full', 'none', 'none', 'none', 'none', 'none'],
+  subscription_plans: ['full', 'none', 'none', 'none', 'none', 'none'],
+  subscription:      ['none', 'full', 'full', 'full', 'full', 'full'],
   settings:          ['full', 'read', 'read', 'read', 'read', 'read'],
   profile:           ['full', 'full', 'full', 'full', 'full', 'full'],
 };
@@ -219,7 +223,7 @@ export function defaultLevel(screenKey: string, roleKey: string): AccessLevel {
   const row = DEFAULTS[screenKey];
   const i = ROLE_ORDER.indexOf(roleKey);
   if (row && i >= 0) return row[i];
-  return screenKey === 'profile' || screenKey === 'notifications' ? 'full' : 'none';
+  return screenKey === 'profile' || screenKey === 'notifications' || screenKey === 'subscription' ? 'full' : 'none';
 }
 
 /** Pick the screen whose path is the longest prefix of `pathname`. */

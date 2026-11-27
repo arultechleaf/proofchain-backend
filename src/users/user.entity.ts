@@ -127,6 +127,20 @@ export class User {
   @Column({ name: 'reset_token_expires', type: 'varchar', length: 40, nullable: true })
   resetTokenExpires: string | null;
 
+  // ── Subscription (kept in step with user_subscriptions by SubscriptionsService) ──
+
+  /** none = never subscribed, active = may use the app, expired = paid period is over. */
+  @Column({ name: 'subscription_status', type: 'varchar', length: 20, default: 'none' })
+  subscriptionStatus: 'none' | 'active' | 'expired';
+
+  /** The plan of the subscription currently running. */
+  @Column({ name: 'subscription_plan_id', type: 'int', nullable: true })
+  subscriptionPlanId: number | null;
+
+  /** Access ends at this moment (the end of the last paid period, renewals included). */
+  @Column({ name: 'subscription_end_at', type: 'datetime', nullable: true })
+  subscriptionEndAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

@@ -319,10 +319,35 @@ export class RazorpayService {
     return { status: 'ok' };
   }
 
+  // ── plain orders (used by other features, e.g. subscriptions) ───────────────
+
+  /** Create a Razorpay order for `amount` rupees that is not tied to an invoice. */
+  async createPlainOrder(amount: number, receipt: string, notes: Record<string, string | number>) {
+    this.requireEnabled();
+    const order = await this.api<{ id: string; amount: number; currency: string }>('POST', '/orders', {
+      amount: Math.round(amount * 100), // paise
+      currency: CURRENCY,
+      receipt: receipt.slice(0, 40),
+      notes,
+    });
+    return { orderId: order.id, amount: order.amount, currency: order.currency, keyId: this.keyId };
+  }
+
+  /** Check the Checkout signature, then that Razorpay captured exactly `amount` rupees for this order. */
+  async confirmPlainPayment(orderId: string, paymentId: string, signature: string, amount: number) {
+    this.requireEnabled();
+    const expected = crypto.createHmac('sha256', this.keySecret).update(`${orderId}|${paymentId}`).digest('hex');
+    if (!safeEqual(expected, signature)) {
+      this.logger.warn(`Bad Razorpay signature for order ${orderId}`);
+      throw new BadRequestException('Payment signature could not be verified');
+    }
+    await this.confirmWithRazorpay({ orderId, amount, currency: CURRENCY }, paymentId);
+  }
+
   // ── internals ────────────────────────────────────────────────────────────
 
   /** Ask Razorpay for the payment itself and make sure it matches our order and is captured. */
-  private async confirmWithRazorpay(order: RazorpayOrder, paymentId: string) {
+  private async confirmWithRazorpay(order: Pick<RazorpayOrder, 'orderId' | 'amount' | 'currency'>, paymentId: string) {
     let payment = await this.api<RazorpayPayment>('GET', `/payments/${encodeURIComponent(paymentId)}`);
 
     if (payment.order_id !== order.orderId) throw new BadRequestException('Payment does not belong to this order');

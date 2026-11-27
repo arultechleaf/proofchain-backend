@@ -29,6 +29,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       companyId: payload.companyId,
       name: payload.name,
       mustChangePassword: !!payload.mcp,
+      // read from the users row on every request, so a purchase or expiry takes effect without signing in again
+      subscriptionEndAt: current.subscriptionEndAt ?? null,
     };
   }
 }

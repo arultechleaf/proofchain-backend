@@ -55,6 +55,8 @@ import { Wallet, WalletTransaction } from './wallet/wallet.entities';
 import { Claim, ClaimBankAccount } from './claims/claim.entities';
 import { WalletModule } from './wallet/wallet.module';
 import { ClaimsModule } from './claims/claims.module';
+import { SUBSCRIPTION_ENTITIES } from './subscriptions/subscription.entities';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 
 // Every table uses an auto-increment numeric id (1, 2, 3 ...); see database/migrate-to-numeric-ids.js.
 const ENTITIES = [
@@ -63,6 +65,7 @@ const ENTITIES = [
   BankAccount, BankTransaction, Expense, Quotation, QuotationLine, RolePermission, Role, Screen, UserScreenPermission, CompanySettings, Branch, ItemBranchStock,
   ...STORE_ENTITIES,
   Wallet, WalletTransaction, Claim, ClaimBankAccount,
+  ...SUBSCRIPTION_ENTITIES,
 ];
 
 @Module({
@@ -160,6 +163,7 @@ const ENTITIES = [
     StoreModule,
     WalletModule,
     ClaimsModule,
+    SubscriptionsModule,
   ],
 })
 export class AppModule {}

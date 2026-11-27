@@ -56,6 +56,15 @@ export class NotificationsService {
     }
   }
 
+  /** Notify one user. Never throws, like notifyCompany. */
+  async notifyUser(userId: number, input: NotifyInput): Promise<void> {
+    try {
+      await this.repo.save(this.repo.create({ userId, type: input.type, title: input.title, message: input.message, link: input.link ?? null }));
+    } catch (err) {
+      this.logger.warn(`Could not create notification: ${(err as Error).message}`);
+    }
+  }
+
   async findAll(query: NotificationQueryDto, userId: number) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;

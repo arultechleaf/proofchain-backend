@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
-export type NotificationType = 'delivery' | 'approval' | 'invoice' | 'payment' | 'system';
+export type NotificationType = 'delivery' | 'approval' | 'invoice' | 'payment' | 'subscription' | 'system';
 
 @Entity('notifications')
 @Index(['userId', 'isRead'])
